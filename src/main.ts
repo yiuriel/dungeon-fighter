@@ -548,7 +548,7 @@ function update(this: Phaser.Scene, time: number) {
 
   // Update enemies
   enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
-    (enemy as Enemy).update(time);
+    (enemy as Enemy).update(time, player);
   });
 
   // Update shield position
