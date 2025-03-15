@@ -1,18 +1,28 @@
 import "./style.css";
 import Phaser from "phaser";
+import {
+  generateMap,
+  renderMap as renderMapFromGenerator,
+  spawnEnemies as spawnEnemiesFromGenerator,
+  tileSize,
+  mapWidth,
+  mapHeight,
+} from "./mapGenerator";
+import { Projectile } from "./spawners/Projectile";
+import { Enemy } from "./spawners/Enemy";
 
 // Game configuration
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 800,
-  height: 600,
+  width: window.innerWidth,
+  height: window.innerHeight,
   parent: "app",
   pixelArt: true, // Add pixelArt setting to prevent texture smoothing
   physics: {
     default: "arcade",
     arcade: {
       gravity: { x: 0, y: 0 },
-      debug: false,
+      debug: true, // Enable debug rendering
     },
   },
   scene: {
@@ -29,9 +39,6 @@ new Phaser.Game(config);
 let player: Phaser.Physics.Arcade.Sprite;
 let cursors: Phaser.Types.Input.Keyboard.CursorKeys;
 let map: number[][] = [];
-let tileSize = 32; // Display size of tiles
-let mapWidth = 25;
-let mapHeight = 19;
 let floorLayer: Phaser.GameObjects.Group;
 let walls: Phaser.Physics.Arcade.StaticGroup;
 let decorations: Phaser.GameObjects.Group;
@@ -44,262 +51,11 @@ let playerAttackArea: Phaser.GameObjects.Rectangle;
 let projectiles: Phaser.Physics.Arcade.Group; // Group for projectiles
 let playerFacing = "down"; // Track player facing direction
 
-// Tile indices in the spritesheet
-const TILES = {
-  // Floor tiles (row 1)
-  FLOOR: {
-    BASIC: 269,
-    CRACKED: 257,
-    DIRTY: 258,
-  },
-  // Wall tiles (row 2)
-  WALL: {
-    BASIC: 16,
-    DAMAGED: 16,
-    DECORATED: 16,
-  },
-  // Decorations (row 3-4)
-  DECORATION: {
-    TORCH: 192,
-    BARREL: 193,
-    CHEST: 194,
-    BONES: 195,
-    BLOOD: 196,
-    SLIME: 197,
-  },
-};
-
-// Enemy class
-class Enemy extends Phaser.Physics.Arcade.Sprite {
-  health: number;
-  maxHealth: number;
-  healthBar: Phaser.GameObjects.Graphics;
-  lastMoveTime: number;
-  moveInterval: number;
-  scene: Phaser.Scene;
-  damageCooldown: boolean; // Add damage cooldown flag
-
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    texture: string,
-    frame: number
-  ) {
-    super(scene, x, y, texture, frame);
-    this.scene = scene;
-    this.health = 100; // Increased from 50 to 100
-    this.maxHealth = 100; // Increased from 50 to 100
-    this.lastMoveTime = 0;
-    this.moveInterval = 1000 + Math.random() * 1000; // Random interval between 1-2 seconds
-    this.damageCooldown = false; // Initialize damage cooldown
-
-    // Create health bar
-    this.healthBar = scene.add.graphics();
-    this.updateHealthBar();
-
-    // Add to scene and physics
-    scene.add.existing(this);
-    scene.physics.add.existing(this);
-
-    // Set depth
-    this.setDepth(8);
-  }
-
-  updateHealthBar() {
-    this.healthBar.clear();
-
-    // Background of health bar (red)
-    this.healthBar.fillStyle(0xff0000);
-    this.healthBar.fillRect(this.x - 15, this.y - 20, 30, 5);
-
-    // Health amount (green)
-    this.healthBar.fillStyle(0x00ff00);
-    const healthWidth = Math.max(0, (this.health / this.maxHealth) * 30);
-    this.healthBar.fillRect(this.x - 15, this.y - 20, healthWidth, 5);
-  }
-
-  takeDamage(amount: number) {
-    // Check if enemy is in damage cooldown
-    if (this.damageCooldown) return;
-
-    // Apply damage
-    this.health -= amount;
-    this.health = Math.max(0, this.health);
-    this.updateHealthBar();
-
-    // Set damage cooldown
-    this.damageCooldown = true;
-    this.scene.time.delayedCall(2000, () => {
-      this.damageCooldown = false;
-    });
-
-    // Check if enemy is dead
-    if (this.health <= 0) {
-      this.die();
-    }
-  }
-
-  die() {
-    // Remove health bar
-    if (this.healthBar) {
-      this.healthBar.destroy();
-    }
-
-    // Destroy the enemy
-    this.destroy();
-  }
-
-  update(time: number) {
-    this.updateHealthBar();
-
-    // Move randomly at intervals
-    if (time > this.lastMoveTime + this.moveInterval) {
-      this.lastMoveTime = time;
-      this.moveInterval = 1000 + Math.random() * 1000;
-
-      // Choose random direction
-      const direction = Math.floor(Math.random() * 4);
-      const speed = 50;
-
-      // Reset velocity
-      this.setVelocity(0);
-
-      switch (direction) {
-        case 0: // Left
-          this.setVelocityX(-speed);
-          this.anims.play("crab_left", true);
-          break;
-        case 1: // Right
-          this.setVelocityX(speed);
-          this.anims.play("crab_right", true);
-          break;
-        case 2: // Up
-          this.setVelocityY(-speed);
-          this.anims.play("crab_up", true);
-          break;
-        case 3: // Down
-          this.setVelocityY(speed);
-          this.anims.play("crab_down", true);
-          break;
-      }
-    }
-  }
-}
-
-// Projectile class
-class Projectile extends Phaser.Physics.Arcade.Sprite {
-  direction: string;
-  active: boolean;
-  isDisappearing: boolean;
-
-  constructor(scene: Phaser.Scene, x: number, y: number, direction: string) {
-    super(scene, x, y, "attack_projectile", 0);
-    this.direction = direction;
-    this.active = false;
-    this.isDisappearing = false;
-
-    // Add to scene and physics
-    scene.add.existing(this);
-    scene.physics.add.existing(this);
-
-    // Set depth to be above floor but below player
-    this.setDepth(5);
-
-    // Set appropriate velocity based on direction
-    const speed = 200;
-    switch (direction) {
-      case "left":
-        this.setVelocityX(-speed);
-        this.setAngle(180); // Rotate sprite to face left
-        break;
-      case "right":
-        this.setVelocityX(speed);
-        break;
-      case "up":
-        this.setVelocityY(-speed);
-        this.setAngle(270); // Rotate sprite to face up
-        break;
-      case "down":
-        this.setVelocityY(speed);
-        this.setAngle(90); // Rotate sprite to face down
-        break;
-    }
-
-    // Play the animation
-    this.anims.play("projectile_launch");
-
-    // Set active frames (frames 2-3)
-    this.scene.time.delayedCall(200, () => {
-      this.active = true;
-    });
-
-    // Set timeout for projectile to disappear if it doesn't hit anything
-    this.scene.time.delayedCall(1000, () => {
-      if (this.active && !this.isDisappearing) {
-        this.startDisappearing();
-      }
-    });
-
-    // Listen for animation complete events
-    this.on("animationcomplete", this.handleAnimationComplete, this);
-  }
-
-  handleAnimationComplete(animation: Phaser.Animations.Animation) {
-    if (animation.key === "projectile_disappear") {
-      this.destroy();
-    }
-  }
-
-  startDisappearing() {
-    if (this.isDisappearing) return;
-
-    this.isDisappearing = true;
-    this.setVelocity(0, 0);
-    this.anims
-      .play("projectile_disappear", true)
-      .once("animationcomplete", () => {
-        this.active = false;
-        this.destroy();
-      });
-  }
-
-  hitTarget() {
-    if (this.active && !this.isDisappearing) {
-      this.startDisappearing();
-    }
-  }
-
-  // Override the preUpdate method to ensure the projectile keeps moving
-  preUpdate(time: number, delta: number) {
-    super.preUpdate(time, delta);
-
-    // Ensure velocity is maintained (in case it's reset elsewhere)
-    if (this.active && this.body && !this.isDisappearing) {
-      const speed = 200;
-      switch (this.direction) {
-        case "left":
-          this.body.velocity.x = -speed;
-          break;
-        case "right":
-          this.body.velocity.x = speed;
-          break;
-        case "up":
-          this.body.velocity.y = -speed;
-          break;
-        case "down":
-          this.body.velocity.y = speed;
-          break;
-      }
-    }
-  }
-}
-
 // Preload assets
 function preload(this: Phaser.Scene) {
   // Load character sprite sheet
   this.load.spritesheet("character", "assets/characters/character_1.png", {
-    frameWidth: 32,
+    frameWidth: 16,
     frameHeight: 32,
   });
 
@@ -337,7 +93,7 @@ function create(this: Phaser.Scene) {
   attackKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
   // Generate procedural map
-  generateMap();
+  map = generateMap();
 
   // Create floor, wall, and decoration groups
   floorLayer = this.add.group();
@@ -347,7 +103,7 @@ function create(this: Phaser.Scene) {
   projectiles = this.physics.add.group({ classType: Projectile });
 
   // Render the map
-  renderMap(this);
+  renderMapFromGenerator(this, map, floorLayer, walls, decorations);
 
   // Create player using the first frame (0)
   player = this.physics.add.sprite(
@@ -361,12 +117,12 @@ function create(this: Phaser.Scene) {
   player.setScale(2);
 
   // Adjust the player's physics body to match the scaled sprite
-  if (player.body) {
-    // Make the player's collision box smaller than the sprite
-    player.body.setSize(tileSize * 0.7, tileSize * 0.7);
-    // Center the collision box
-    player.body.setOffset(tileSize * 0.3, tileSize * 0.3);
-  }
+  // if (player.body) {
+  //   // Make the player's collision box smaller than the sprite
+  //   // player.body.setSize(tileSize * 0.5, tileSize * 0.5);
+  //   // Center the collision box
+  //   // player.body.setOffset(tileSize, tileSize);
+  // }
 
   // Create animations for the player
   this.anims.create({
@@ -482,6 +238,16 @@ function create(this: Phaser.Scene) {
   });
 
   this.anims.create({
+    key: "projectile_idle",
+    frames: this.anims.generateFrameNumbers("attack_projectile", {
+      start: 3,
+      end: 4,
+    }),
+    frameRate: 16,
+    repeat: -1,
+  });
+
+  this.anims.create({
     key: "projectile_disappear",
     frames: this.anims.generateFrameNumbers("attack_projectile", {
       start: 4,
@@ -538,8 +304,8 @@ function create(this: Phaser.Scene) {
   playerAttackArea = this.add.rectangle(
     0,
     0,
-    tileSize * 1.5,
-    tileSize * 1.5,
+    tileSize * 1.25,
+    tileSize * 1.25,
     0xff0000,
     0
   );
@@ -573,8 +339,8 @@ function create(this: Phaser.Scene) {
   playerHealthBar.setDepth(100);
   updatePlayerHealthBar(this);
 
-  // Spawn enemies randomly on floor tiles
-  spawnEnemies(this);
+  // Spawn enemies
+  spawnEnemiesFromGenerator(map, enemies);
 
   // Start with idle animation
   player.anims.play("idle_down");
@@ -821,7 +587,7 @@ function handleProjectileEnemyCollision(projectile: any, enemyObj: any) {
     // Only apply knockback if damage was taken
     if (prevHealth > enemy.health) {
       // Calculate knockback direction based on projectile direction
-      const knockbackForce = 150;
+      const knockbackForce = 100;
       let knockbackX = 0;
       let knockbackY = 0;
 
@@ -845,7 +611,7 @@ function handleProjectileEnemyCollision(projectile: any, enemyObj: any) {
       }
 
       // Briefly disable enemy movement decisions during knockback
-      enemy.lastMoveTime = proj.scene.time.now + 500;
+      enemy.lastMoveTime = proj.scene.time.now + 300;
 
       // Visual feedback
       enemy.setTint(0xff0000);
@@ -891,6 +657,7 @@ function updatePlayerHealthBar(scene: Phaser.Scene) {
         fontSize: "16px",
         color: "#ffffff",
       })
+      .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(100)
       .setName("healthText");
@@ -901,275 +668,5 @@ function updatePlayerHealthBar(scene: Phaser.Scene) {
     healthText.setText(`Health: ${playerHealth}/100`);
     healthText.setScrollFactor(0);
     healthText.setDepth(100);
-  }
-}
-
-// Spawn enemies on random floor tiles
-function spawnEnemies(scene: Phaser.Scene) {
-  const numEnemies = 5 + Math.floor(Math.random() * 5); // 5-10 enemies
-
-  // Find all floor tiles
-  const floorTiles = [];
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      if (map[y][x] === 0) {
-        // Don't spawn too close to player start
-        const centerX = Math.floor(mapWidth / 2);
-        const centerY = Math.floor(mapHeight / 2);
-        const distance = Math.sqrt(
-          Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2)
-        );
-
-        if (distance > 5) {
-          // At least 5 tiles away from center
-          floorTiles.push({ x, y });
-        }
-      }
-    }
-  }
-
-  // Shuffle floor tiles
-  floorTiles.sort(() => Math.random() - 0.5);
-
-  // Spawn enemies on random floor tiles
-  for (let i = 0; i < Math.min(numEnemies, floorTiles.length); i++) {
-    const tile = floorTiles[i];
-    const enemy = new Enemy(
-      scene,
-      tile.x * tileSize + tileSize / 2,
-      tile.y * tileSize + tileSize / 2,
-      "enemy_crab",
-      0
-    );
-
-    // Add to group
-    enemies.add(enemy);
-
-    // Start with idle animation
-    enemy.anims.play("crab_idle");
-  }
-}
-
-// Generate a procedural map using cellular automata
-function generateMap() {
-  // Initialize map with random walls
-  map = Array(mapHeight)
-    .fill(0)
-    .map(() => Array(mapWidth).fill(0));
-
-  // Fill map with random walls (1) and floors (0)
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      // Make edges walls
-      if (x === 0 || y === 0 || x === mapWidth - 1 || y === mapHeight - 1) {
-        map[y][x] = 1; // Wall
-      } else {
-        // Random walls with 40% probability
-        map[y][x] = Math.random() < 0.4 ? 1 : 0;
-      }
-    }
-  }
-
-  // Apply cellular automata to smooth the map
-  for (let i = 0; i < 4; i++) {
-    map = smoothMap(map);
-  }
-
-  // Ensure the center is always a floor for player spawn
-  const centerX = Math.floor(mapWidth / 2);
-  const centerY = Math.floor(mapHeight / 2);
-
-  // Create a clear area in the center
-  for (let y = centerY - 2; y <= centerY + 2; y++) {
-    for (let x = centerX - 2; x <= centerX + 2; x++) {
-      if (x >= 0 && x < mapWidth && y >= 0 && y < mapHeight) {
-        map[y][x] = 0; // Floor
-      }
-    }
-  }
-}
-
-// Smooth the map using cellular automata rules
-function smoothMap(oldMap: number[][]): number[][] {
-  const newMap = Array(mapHeight)
-    .fill(0)
-    .map(() => Array(mapWidth).fill(0));
-
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      // Count walls in 3x3 neighborhood
-      let wallCount = 0;
-
-      for (let ny = -1; ny <= 1; ny++) {
-        for (let nx = -1; nx <= 1; nx++) {
-          const checkX = x + nx;
-          const checkY = y + ny;
-
-          // Check if out of bounds or is a wall
-          if (
-            checkX < 0 ||
-            checkX >= mapWidth ||
-            checkY < 0 ||
-            checkY >= mapHeight ||
-            oldMap[checkY][checkX] === 1
-          ) {
-            wallCount++;
-          }
-        }
-      }
-
-      // Apply cellular automata rules
-      if (oldMap[y][x] === 1) {
-        // If cell is a wall
-        newMap[y][x] = wallCount >= 4 ? 1 : 0;
-      } else {
-        // If cell is a floor
-        newMap[y][x] = wallCount >= 5 ? 1 : 0;
-      }
-
-      // Keep edges as walls
-      if (x === 0 || y === 0 || x === mapWidth - 1 || y === mapHeight - 1) {
-        newMap[y][x] = 1;
-      }
-    }
-  }
-
-  return newMap;
-}
-
-// Render the map in the scene
-function renderMap(scene: Phaser.Scene) {
-  // Fill the entire map with black background first
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      const tileX = x * tileSize;
-      const tileY = y * tileSize;
-
-      // Add a black background tile everywhere
-      const backgroundTile = scene.add.rectangle(
-        tileX + tileSize / 2,
-        tileY + tileSize / 2,
-        tileSize,
-        tileSize,
-        0x000000
-      );
-      backgroundTile.setDepth(-1); // Set background to lowest depth
-    }
-  }
-
-  // Then create all floor tiles
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      const tileX = x * tileSize;
-      const tileY = y * tileSize;
-
-      // Only add floor tiles where the map indicates (not on walls)
-      if (map[y][x] === 0) {
-        // Select floor tile type based on position and randomness
-        let floorFrame = TILES.FLOOR.BASIC;
-
-        // Add variety to floor tiles
-        const rand = Math.random();
-        if (rand < 0.1) {
-          floorFrame = TILES.FLOOR.CRACKED; // 10% chance of cracked floor
-        } else if (rand < 0.2) {
-          floorFrame = TILES.FLOOR.DIRTY; // 10% chance of dirty floor
-        }
-
-        const floorTile = scene.add.sprite(
-          tileX + tileSize / 2,
-          tileY + tileSize / 2,
-          "tileset",
-          floorFrame
-        );
-
-        // Scale the 16x16 tiles to 32x32 to match the player size
-        floorTile.setScale(2);
-        floorTile.setDepth(0); // Set floor to lowest depth
-        floorLayer.add(floorTile);
-      }
-    }
-  }
-
-  // Then add wall tiles on top
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      const tileX = x * tileSize;
-      const tileY = y * tileSize;
-
-      if (map[y][x] === 1) {
-        // Select wall tile type based on position and randomness
-        let wallFrame = TILES.WALL.BASIC;
-
-        // Add variety to wall tiles
-        const rand = Math.random();
-        if (rand < 0.15) {
-          wallFrame = TILES.WALL.DAMAGED; // 15% chance of damaged wall
-        } else if (rand < 0.25) {
-          wallFrame = TILES.WALL.DECORATED; // 10% chance of decorated wall
-        }
-
-        const wall = walls.create(
-          tileX + tileSize / 2,
-          tileY + tileSize / 2,
-          "tileset",
-          wallFrame
-        );
-
-        // Scale the 16x16 tiles to 32x32 to match the player size
-        wall.setScale(2);
-        wall.setDepth(5); // Set walls to higher depth than floor
-        wall.setImmovable(true);
-
-        // Update the physics body size to match the scaled sprite
-        if (wall.body) {
-          wall.body.setSize(tileSize, tileSize);
-        }
-      }
-    }
-  }
-
-  // Add decorations on floor tiles
-  for (let y = 0; y < mapHeight; y++) {
-    for (let x = 0; x < mapWidth; x++) {
-      // Only add decorations on floor tiles (not walls)
-      if (map[y][x] === 0) {
-        const tileX = x * tileSize;
-        const tileY = y * tileSize;
-
-        // 8% chance to add a decoration on a floor tile
-        if (Math.random() < 0.08) {
-          // Choose a random decoration
-          let decorFrame;
-          const rand = Math.random();
-
-          if (rand < 0.2) {
-            decorFrame = TILES.DECORATION.TORCH; // 20% chance of torch
-          } else if (rand < 0.4) {
-            decorFrame = TILES.DECORATION.BARREL; // 20% chance of barrel
-          } else if (rand < 0.5) {
-            decorFrame = TILES.DECORATION.CHEST; // 10% chance of chest
-          } else if (rand < 0.7) {
-            decorFrame = TILES.DECORATION.BONES; // 20% chance of bones
-          } else if (rand < 0.85) {
-            decorFrame = TILES.DECORATION.BLOOD; // 15% chance of blood
-          } else {
-            decorFrame = TILES.DECORATION.SLIME; // 15% chance of slime
-          }
-
-          const decoration = scene.add.sprite(
-            tileX + tileSize / 2,
-            tileY + tileSize / 2,
-            "tileset",
-            decorFrame
-          );
-
-          // Scale the 16x16 tiles to 32x32 to match the player size
-          decoration.setScale(2);
-          decoration.setDepth(2); // Set decorations above floor but below walls
-          decorations.add(decoration);
-        }
-      }
-    }
   }
 }
