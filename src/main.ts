@@ -22,7 +22,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: "arcade",
     arcade: {
       gravity: { x: 0, y: 0 },
-      debug: true, // Enable debug rendering
+      debug: false, // Enable debug rendering
     },
   },
   scene: {
@@ -46,7 +46,11 @@ let enemies: Phaser.Physics.Arcade.Group;
 let playerHealthBar: Phaser.GameObjects.Graphics;
 let playerHealth = 100;
 let attackKey: Phaser.Input.Keyboard.Key;
+let attackKey2: Phaser.Input.Keyboard.Key; // Key for attack 2
+let attackKey3: Phaser.Input.Keyboard.Key; // Key for shield
 let attackCooldown = false;
+let shieldActive = false; // Track if shield is active
+let shieldSprite: Phaser.GameObjects.Sprite; // Sprite for shield animation
 let playerAttackArea: Phaser.GameObjects.Rectangle;
 let projectiles: Phaser.Physics.Arcade.Group; // Group for projectiles
 let playerFacing = "down"; // Track player facing direction
@@ -86,6 +90,22 @@ function preload(this: Phaser.Scene) {
     frameWidth: 32,
     frameHeight: 32,
   });
+
+  // Load player attack 2 animation
+  this.load.spritesheet(
+    "player_attack_2",
+    "assets/attack/player_attack_2.png",
+    {
+      frameWidth: 32,
+      frameHeight: 32,
+    }
+  );
+
+  // Load player shield animation
+  this.load.spritesheet("player_shield", "assets/attack/player_attack_3.png", {
+    frameWidth: 32,
+    frameHeight: 32,
+  });
 }
 
 // Create game objects
@@ -97,6 +117,8 @@ function create(this: Phaser.Scene) {
 
   cursors = this.input.keyboard.createCursorKeys();
   attackKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+  attackKey2 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C); // C key for attack 2
+  attackKey3 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X); // X key for shield
 
   // Generate procedural map
   map = generateMap();
@@ -274,6 +296,50 @@ function create(this: Phaser.Scene) {
     repeat: 0,
   });
 
+  // Create attack 2 animation
+  this.anims.create({
+    key: "attack2",
+    frames: this.anims.generateFrameNumbers("player_attack_2", {
+      start: 0,
+      end: 16,
+    }),
+    frameRate: 24,
+    repeat: 0,
+  });
+
+  // Create shield start animation
+  this.anims.create({
+    key: "shield_start",
+    frames: this.anims.generateFrameNumbers("player_shield", {
+      start: 0,
+      end: 13,
+    }),
+    frameRate: 24,
+    repeat: 0,
+  });
+
+  // Create shield idle animation
+  this.anims.create({
+    key: "shield_idle",
+    frames: this.anims.generateFrameNumbers("player_shield", {
+      start: 14,
+      end: 15,
+    }),
+    frameRate: 8,
+    repeat: -1, // Loop indefinitely
+  });
+
+  // Create shield end animation
+  this.anims.create({
+    key: "shield_end",
+    frames: this.anims.generateFrameNumbers("player_shield", {
+      start: 16,
+      end: 21,
+    }),
+    frameRate: 24,
+    repeat: 0,
+  });
+
   // Set player depth to be above floor and walls
   player.setDepth(10);
 
@@ -295,6 +361,30 @@ function create(this: Phaser.Scene) {
       // Cast to proper types
       const playerSprite = playerObj as Phaser.Physics.Arcade.Sprite;
       const enemy = enemyObj as Enemy;
+
+      // If shield is active, don't take damage
+      if (shieldActive) {
+        // Just push the enemy back slightly
+        const angle = Phaser.Math.Angle.Between(
+          playerSprite.x,
+          playerSprite.y,
+          enemy.x,
+          enemy.y
+        );
+        const pushForce = 150;
+        const pushX = Math.cos(angle) * pushForce;
+        const pushY = Math.sin(angle) * pushForce;
+        enemy.setVelocity(pushX, pushY);
+
+        // Visual feedback on the shield
+        if (shieldSprite) {
+          shieldSprite.setTint(0x00ffff);
+          playerSprite.scene.time.delayedCall(100, () => {
+            if (shieldSprite) shieldSprite.clearTint();
+          });
+        }
+        return;
+      }
 
       // Only proceed if the enemy isn't already biting and player isn't in cooldown
       if (
@@ -427,9 +517,46 @@ function create(this: Phaser.Scene) {
 
 // Update game state
 function update(this: Phaser.Scene, time: number) {
-  // Skip if player is destroyed
-  if (!player || !player.active) return;
+  // Skip update if player is dead
+  if (!player.active) return;
 
+  // Update player movement
+  updatePlayerMovement();
+
+  // Update attack cooldown
+  if (attackKey.isDown && !attackCooldown) {
+    attackCooldown = true;
+    fireProjectile(this);
+    this.time.delayedCall(500, () => {
+      attackCooldown = false;
+    });
+  }
+
+  // Handle Attack 2 (C key)
+  if (attackKey2.isDown && !attackCooldown) {
+    attackCooldown = true;
+    performAttack2(this);
+    this.time.delayedCall(800, () => {
+      attackCooldown = false;
+    });
+  }
+
+  // Handle Shield (X key)
+  if (attackKey3.isDown && !shieldActive && !attackCooldown) {
+    activateShield(this);
+  }
+
+  // Update enemies
+  enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
+    (enemy as Enemy).update(time);
+  });
+
+  // Update shield position
+  updateShieldPosition();
+}
+
+// Handle player movement
+function updatePlayerMovement() {
   // Reset player velocity
   player.setVelocity(0);
 
@@ -484,54 +611,205 @@ function update(this: Phaser.Scene, time: number) {
 
   // Update attack area position based on player position and facing direction
   updateAttackAreaPosition(playerFacing);
+}
 
-  // Handle attack input
-  if (attackKey.isDown && !attackCooldown) {
-    attackCooldown = true;
+// Fire a projectile in the direction the player is facing
+function fireProjectile(scene: Phaser.Scene) {
+  // Visual feedback for attack
+  scene.cameras.main.shake(100, 0.005);
 
-    // Visual feedback for attack
-    this.cameras.main.shake(100, 0.005);
+  // Create a new projectile in the facing direction
+  const offsetDistance = 20; // Distance from player center to spawn projectile
+  let projectileX = player.x;
+  let projectileY = player.y;
 
-    // Create a new projectile in the facing direction
-    const offsetDistance = 20; // Distance from player center to spawn projectile
-    let projectileX = player.x;
-    let projectileY = player.y;
-
-    // Adjust spawn position based on facing direction
-    switch (playerFacing) {
-      case "left":
-        projectileX -= offsetDistance;
-        break;
-      case "right":
-        projectileX += offsetDistance;
-        break;
-      case "up":
-        projectileY -= offsetDistance;
-        break;
-      case "down":
-        projectileY += offsetDistance;
-        break;
-    }
-
-    // Create and add the projectile to the group
-    const projectile = new Projectile(
-      this,
-      projectileX,
-      projectileY,
-      playerFacing
-    );
-    projectiles.add(projectile);
-
-    // Reset cooldown after delay
-    this.time.delayedCall(500, () => {
-      attackCooldown = false;
-    });
+  // Adjust spawn position based on facing direction
+  switch (playerFacing) {
+    case "left":
+      projectileX -= offsetDistance;
+      break;
+    case "right":
+      projectileX += offsetDistance;
+      break;
+    case "up":
+      projectileY -= offsetDistance;
+      break;
+    case "down":
+      projectileY += offsetDistance;
+      break;
   }
 
-  // Update all enemies
-  enemies.getChildren().forEach((enemy) => {
-    (enemy as Enemy).update(time);
+  // Create and add the projectile to the group
+  const projectile = new Projectile(
+    scene,
+    projectileX,
+    projectileY,
+    playerFacing
+  );
+  projectiles.add(projectile);
+}
+
+// Perform the second attack (melee slash in front of player)
+function performAttack2(scene: Phaser.Scene) {
+  // Calculate the position where the attack would appear
+  let attackX = player.x;
+  let attackY = player.y;
+  let angle = 0;
+
+  // Position the attack 100 units in front of the player
+  switch (playerFacing) {
+    case "left":
+      attackX -= 100;
+      angle = 180;
+      break;
+    case "right":
+      attackX += 100;
+      angle = 0;
+      break;
+    case "up":
+      attackY -= 100;
+      angle = 270;
+      break;
+    case "down":
+      attackY += 100;
+      angle = 90;
+      break;
+  }
+
+  // Create a temporary physics body to check for wall collisions
+  const tempBody = scene.physics.add.sprite(
+    attackX,
+    attackY,
+    "player_attack_2"
+  );
+  tempBody.setVisible(false);
+  tempBody.setSize(32, 32);
+
+  // Check if the attack would hit a wall
+  let willHitWall = false;
+  scene.physics.world.collide(tempBody, walls, () => {
+    willHitWall = true;
   });
+
+  // Destroy the temporary body
+  tempBody.destroy();
+
+  // If the attack would hit a wall, don't perform it
+  if (willHitWall) {
+    // Visual feedback that attack can't be performed
+    player.setTint(0xaaaaaa);
+    scene.time.delayedCall(100, () => {
+      player.clearTint();
+    });
+    return;
+  }
+
+  // Create the attack animation sprite
+  const attackAnim = scene.add.sprite(attackX, attackY, "player_attack_2");
+  attackAnim.setDepth(15);
+  attackAnim.setAngle(angle);
+  attackAnim.anims.play("attack2");
+
+  // Create a physics body for the attack to detect collisions
+  const attackArea = scene.physics.add.sprite(
+    attackX,
+    attackY,
+    "player_attack_2"
+  );
+  attackArea.setVisible(false); // Hide the actual physics sprite
+  attackArea.setSize(64, 64); // Larger collision area
+
+  // Check for enemies in range and damage them
+  scene.physics.add.overlap(attackArea, enemies, (_attackObj, enemyObj) => {
+    const enemy = enemyObj as Enemy;
+
+    // Apply damage to enemy
+    const damage = 30;
+    const prevHealth = enemy.health;
+    enemy.takeDamage(damage);
+
+    // Only apply knockback if damage was taken
+    if (prevHealth > enemy.health) {
+      // Calculate knockback direction based on attack direction
+      const knockbackForce = 100;
+      let knockbackX = 0;
+      let knockbackY = 0;
+
+      switch (playerFacing) {
+        case "left":
+          knockbackX = -knockbackForce;
+          break;
+        case "right":
+          knockbackX = knockbackForce;
+          break;
+        case "up":
+          knockbackY = -knockbackForce;
+          break;
+        case "down":
+          knockbackY = knockbackForce;
+          break;
+      }
+
+      // Apply knockback
+      if (enemy.active) {
+        enemy.setVelocity(knockbackX, knockbackY);
+      }
+
+      // Briefly disable enemy movement decisions during knockback
+      enemy.lastMoveTime = scene.time.now + 300;
+
+      // Visual feedback
+      enemy.setTint(0xff0000);
+      scene.time.delayedCall(200, () => {
+        enemy.clearTint();
+      });
+    }
+  });
+
+  // Clean up the attack area after animation completes
+  attackAnim.once("animationcomplete", () => {
+    attackAnim.destroy();
+    attackArea.destroy();
+  });
+}
+
+// Activate the shield
+function activateShield(scene: Phaser.Scene) {
+  // Set shield as active
+  shieldActive = true;
+
+  // Create shield sprite around player
+  shieldSprite = scene.add.sprite(player.x, player.y, "player_shield");
+  shieldSprite.setDepth(12); // Above player but below UI
+  shieldSprite.setScale(1.5);
+
+  // Play start animation
+  shieldSprite.anims.play("shield_start");
+
+  // When start animation completes, switch to idle
+  shieldSprite.once("animationcomplete", () => {
+    shieldSprite.anims.play("shield_idle");
+
+    // Set a timer to end the shield after 2 seconds
+    scene.time.delayedCall(2000, () => {
+      // Play end animation
+      shieldSprite.anims.play("shield_end");
+
+      // When end animation completes, destroy the shield
+      shieldSprite.once("animationcomplete", () => {
+        shieldSprite.destroy();
+        shieldActive = false;
+      });
+    });
+  });
+}
+
+// Update the shield position to follow the player
+function updateShieldPosition() {
+  if (shieldActive && shieldSprite) {
+    shieldSprite.x = player.x;
+    shieldSprite.y = player.y;
+  }
 }
 
 // Position the attack area based on player facing direction
@@ -692,7 +970,7 @@ function updatePlayerHealthBar(scene: Phaser.Scene) {
   // Health text
   if (!scene.children.getByName("healthText")) {
     scene.add
-      .text(15, 12, `Health: ${playerHealth}/100`, {
+      .text(110, 20, `Health: ${playerHealth}/100`, {
         fontSize: "16px",
         color: "#ffffff",
       })
@@ -705,6 +983,7 @@ function updatePlayerHealthBar(scene: Phaser.Scene) {
       "healthText"
     ) as Phaser.GameObjects.Text;
     healthText.setText(`Health: ${playerHealth}/100`);
+    healthText.setPosition(110, 20);
     healthText.setScrollFactor(0);
     healthText.setDepth(100);
   }
@@ -722,17 +1001,81 @@ function playerTakeDamage(damage: number) {
 
   // Check for game over
   if (playerHealth <= 0) {
-    // Game over logic
-    player.scene.add
-      .text(400, 300, "GAME OVER", {
-        fontSize: "64px",
-        color: "#ff0000",
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0);
-
-    // Disable player
-    player.disableBody(true, false);
-    player.setTint(0xff0000);
+    triggerGameOver(player.scene);
   }
+}
+
+// Handle game over state
+function triggerGameOver(scene: Phaser.Scene) {
+  // Display game over text
+  scene.add
+    .text(
+      scene.cameras.main.width / 2,
+      scene.cameras.main.height / 2,
+      "GAME OVER",
+      {
+        fontSize: "80px",
+        color: "#ff0000",
+      }
+    )
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(100);
+
+  // Disable player
+  player.disableBody(true, false);
+  player.setTint(0xff0000);
+
+  // Stop all enemies
+  enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
+    const enemySprite = enemy as Enemy;
+    enemySprite.disableBody(true, false);
+    enemySprite.setTint(0x555555); // Gray out enemies
+
+    // Stop any ongoing animations
+    if (enemySprite.anims.isPlaying) {
+      enemySprite.anims.stop();
+    }
+  });
+
+  // Stop any projectiles
+  projectiles.getChildren().forEach((proj: Phaser.GameObjects.GameObject) => {
+    const projectile = proj as Projectile;
+    projectile.disableBody(true, false);
+    projectile.setActive(false);
+    projectile.setVisible(false);
+  });
+
+  // Add a restart button
+  const restartButton = scene.add
+    .text(
+      scene.cameras.main.width / 2,
+      scene.cameras.main.height / 2 + 100,
+      "RESTART",
+      {
+        fontSize: "32px",
+        color: "#ffffff",
+        backgroundColor: "#222222",
+        padding: { left: 20, right: 20, top: 10, bottom: 10 },
+      }
+    )
+    .setOrigin(0.5)
+    .setScrollFactor(0)
+    .setDepth(100)
+    .setInteractive({ useHandCursor: true });
+
+  // Add hover effect
+  restartButton.on("pointerover", () => {
+    restartButton.setStyle({ color: "#ffff00" });
+  });
+
+  restartButton.on("pointerout", () => {
+    restartButton.setStyle({ color: "#ffffff" });
+  });
+
+  // Add click handler to restart the game
+  restartButton.on("pointerdown", () => {
+    scene.scene.restart();
+    playerHealth = 100;
+  });
 }
