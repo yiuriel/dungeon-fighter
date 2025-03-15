@@ -54,6 +54,9 @@ let shieldSprite: Phaser.GameObjects.Sprite; // Sprite for shield animation
 let playerAttackArea: Phaser.GameObjects.Rectangle;
 let projectiles: Phaser.Physics.Arcade.Group; // Group for projectiles
 let playerFacing = "down"; // Track player facing direction
+let currentLevel = 1; // Track current level
+let nextLevelSign: Phaser.GameObjects.Text | null = null; // Next level sign
+let nextLevelPortal: Phaser.GameObjects.Ellipse | null = null; // Portal visual
 
 // Preload assets
 function preload(this: Phaser.Scene) {
@@ -520,7 +523,7 @@ function update(this: Phaser.Scene, time: number) {
   // Skip update if player is dead
   if (!player.active) return;
 
-  // Update player movement
+  // Handle player movement
   updatePlayerMovement();
 
   // Update attack cooldown
@@ -553,6 +556,150 @@ function update(this: Phaser.Scene, time: number) {
 
   // Update shield position
   updateShieldPosition();
+
+  // Check if all enemies are defeated
+  const activeEnemies = enemies.getChildren().filter((enemy) => {
+    return (enemy as Phaser.Physics.Arcade.Sprite).active;
+  });
+
+  // If next level sign is already showing, check if player is touching it
+  if (nextLevelSign) {
+    const playerBounds = player.getBounds();
+    const signBounds = nextLevelSign.getBounds();
+
+    if (Phaser.Geom.Rectangle.Overlaps(playerBounds, signBounds)) {
+      // Go to next level
+
+      // Increment level counter
+      currentLevel++;
+
+      // Clear existing objects
+      if (nextLevelSign) {
+        nextLevelSign.destroy();
+        nextLevelSign = null;
+      }
+
+      if (nextLevelPortal) {
+        nextLevelPortal.destroy();
+        nextLevelPortal = null;
+      }
+
+      // Destroy all existing enemies
+      enemies.clear(true, true);
+
+      // Destroy all projectiles
+      projectiles.clear(true, true);
+
+      // Generate a new map
+      map = generateMap();
+
+      // Clear and recreate walls
+      walls.clear(true, true);
+
+      // Render the new map
+      renderMapFromGenerator(this, map, floorLayer, walls, decorations);
+
+      // Set up collisions again
+      this.physics.add.collider(player, walls);
+      this.physics.add.collider(enemies, walls);
+      this.physics.add.collider(
+        projectiles,
+        walls,
+        handleProjectileWallCollision,
+        undefined,
+        this
+      );
+
+      // Spawn more enemies based on the current level
+      const enemyCount = 5 + currentLevel * 2; // Increase enemy count with each level
+      spawnEnemiesFromGenerator(map, enemies, enemyCount);
+
+      // Reset player health and give bonus
+      playerHealth = Math.min(100, playerHealth + 20); // Heal player by 20, up to max 100
+      updatePlayerHealthBar(this);
+
+      // Show level notification
+      const levelText = this.add
+        .text(
+          this.cameras.main.width / 2,
+          this.cameras.main.height / 2,
+          `LEVEL ${currentLevel}`,
+          {
+            fontSize: "64px",
+            color: "#ffffff",
+            stroke: "#000000",
+            strokeThickness: 6,
+          }
+        )
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(100);
+
+      // Fade out level notification
+      this.tweens.add({
+        targets: levelText,
+        alpha: 0,
+        duration: 3000,
+        ease: "Power2",
+        onComplete: () => {
+          levelText.destroy();
+        },
+      });
+    }
+
+    return;
+  }
+
+  // If no active enemies and no next level sign, show next level sign
+  if (activeEnemies.length === 0 && !nextLevelSign) {
+    // Create a glowing portal near the player
+    const portalX = player.x + 100; // Place it a bit ahead of the player
+    const portalY = player.y;
+
+    // Create portal glow effect
+    nextLevelPortal = this.add.ellipse(portalX, portalY, 80, 80, 0x00ffff, 0.3);
+    nextLevelPortal.setDepth(5);
+
+    // Add pulsing animation to the glow
+    this.tweens.add({
+      targets: nextLevelPortal,
+      alpha: 0.6,
+      scale: 1.2,
+      duration: 1000,
+      yoyo: true,
+      repeat: -1,
+    });
+
+    // Create the next level text
+    nextLevelSign = this.add
+      .text(
+        portalX,
+        portalY - 60,
+        `LEVEL ${currentLevel} COMPLETE!\nENTER PORTAL`,
+        {
+          fontSize: "20px",
+          color: "#ffffff",
+          stroke: "#000000",
+          strokeThickness: 4,
+          align: "center",
+        }
+      )
+      .setOrigin(0.5)
+      .setDepth(10);
+
+    // Add a floating animation to the text
+    this.tweens.add({
+      targets: nextLevelSign,
+      y: portalY - 70,
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+
+    // Play a victory sound
+    // this.sound.play('level-complete');
+  }
 }
 
 // Handle player movement

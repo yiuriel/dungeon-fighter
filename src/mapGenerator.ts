@@ -230,10 +230,11 @@ export function renderMap(
 // Spawn enemies at random positions on the map
 export function spawnEnemies(
   map: number[][],
-  enemies: Phaser.Physics.Arcade.Group
+  enemies: Phaser.Physics.Arcade.Group,
+  additionalEnemies: number = 0
 ) {
   // Number of enemies to spawn
-  const enemyCount = 10;
+  const enemyCount = 2 + additionalEnemies;
 
   // Keep track of spawned positions to avoid overlaps
   const spawnedPositions: { x: number; y: number }[] = [];
