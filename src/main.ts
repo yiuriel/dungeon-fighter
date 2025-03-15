@@ -56,7 +56,7 @@ function preload(this: Phaser.Scene) {
   // Load character sprite sheet
   this.load.spritesheet("character", "assets/characters/character_1.png", {
     frameWidth: 16,
-    frameHeight: 32,
+    frameHeight: 22,
   });
 
   // Load tileset as a spritesheet with 16x16 tiles
@@ -80,6 +80,12 @@ function preload(this: Phaser.Scene) {
       frameHeight: 32,
     }
   );
+
+  // Load enemy bite animation
+  this.load.spritesheet("enemy_bite_1", "assets/attack/enemy_bite_1.png", {
+    frameWidth: 32,
+    frameHeight: 32,
+  });
 }
 
 // Create game objects
@@ -257,6 +263,17 @@ function create(this: Phaser.Scene) {
     repeat: 0,
   });
 
+  // Create enemy bite animation
+  this.anims.create({
+    key: "enemy_bite",
+    frames: this.anims.generateFrameNumbers("enemy_bite_1", {
+      start: 0,
+      end: 16,
+    }),
+    frameRate: 24,
+    repeat: 0,
+  });
+
   // Set player depth to be above floor and walls
   player.setDepth(10);
 
@@ -274,7 +291,66 @@ function create(this: Phaser.Scene) {
   this.physics.add.collider(
     player,
     enemies,
-    handlePlayerEnemyCollision,
+    (playerObj, enemyObj) => {
+      // Cast to proper types
+      const playerSprite = playerObj as Phaser.Physics.Arcade.Sprite;
+      const enemy = enemyObj as Enemy;
+
+      // Only proceed if the enemy isn't already biting and player isn't in cooldown
+      if (
+        (enemy.anims.currentAnim &&
+          enemy.anims.currentAnim.key === "enemy_bite") ||
+        attackCooldown
+      ) {
+        return;
+      }
+
+      // Set attack cooldown
+      attackCooldown = true;
+      playerSprite.scene.time.delayedCall(1000, () => {
+        attackCooldown = false;
+      });
+
+      // Play bite animation
+      const biteAnim = enemy.scene.add.sprite(enemy.x, enemy.y, "enemy_bite_1");
+      biteAnim.setScale(3);
+      biteAnim.setDepth(15); // Above player and enemy
+      biteAnim.anims.play("enemy_bite");
+
+      // Position the bite animation between player and enemy
+      const midX = (playerSprite.x + enemy.x) / 2;
+      const midY = (playerSprite.y + enemy.y) / 2;
+      biteAnim.setPosition(midX, midY);
+
+      // Rotate the bite animation to face the player
+      const angle = Phaser.Math.Angle.Between(
+        enemy.x,
+        enemy.y,
+        playerSprite.x,
+        playerSprite.y
+      );
+      biteAnim.setRotation(angle);
+
+      // Damage the player
+      playerTakeDamage(10);
+
+      // Destroy the bite animation when it completes
+      biteAnim.once("animationcomplete", () => {
+        biteAnim.destroy();
+      });
+
+      // Apply knockback to the player
+      const knockbackForce = 100;
+      const knockbackX = Math.cos(angle) * knockbackForce;
+      const knockbackY = Math.sin(angle) * knockbackForce;
+      playerSprite.setVelocity(knockbackX, knockbackY);
+
+      // Visual feedback - flash the player red
+      playerSprite.setTint(0xff0000);
+      playerSprite.scene.time.delayedCall(200, () => {
+        playerSprite.clearTint();
+      });
+    },
     undefined,
     this
   );
@@ -530,43 +606,6 @@ function handleAttackHit(this: Phaser.Scene, _: any, object2: any) {
   }
 }
 
-// Handle collision between player and enemy
-function handlePlayerEnemyCollision(_: any, __: any) {
-  // Only take damage if not in cooldown
-  if (!attackCooldown) {
-    playerHealth -= 5;
-    playerHealth = Math.max(0, playerHealth);
-
-    // Update health bar
-    updatePlayerHealthBar(player.scene);
-
-    // Visual feedback
-    player.scene.cameras.main.shake(100, 0.01);
-
-    // Check for game over
-    if (playerHealth <= 0) {
-      // Game over logic
-      player.scene.add
-        .text(400, 300, "GAME OVER", {
-          fontSize: "64px",
-          color: "#ff0000",
-        })
-        .setOrigin(0.5)
-        .setScrollFactor(0);
-
-      // Disable player
-      player.disableBody(true, false);
-      player.setTint(0xff0000);
-    }
-
-    // Brief invulnerability
-    attackCooldown = true;
-    player.scene.time.delayedCall(1000, () => {
-      attackCooldown = false;
-    });
-  }
-}
-
 // Handle projectile hitting a wall
 function handleProjectileWallCollision(projectile: any, _wall: any) {
   (projectile as Projectile).hitTarget();
@@ -668,5 +707,32 @@ function updatePlayerHealthBar(scene: Phaser.Scene) {
     healthText.setText(`Health: ${playerHealth}/100`);
     healthText.setScrollFactor(0);
     healthText.setDepth(100);
+  }
+}
+
+function playerTakeDamage(damage: number) {
+  playerHealth -= damage;
+  playerHealth = Math.max(0, playerHealth);
+
+  // Update health bar
+  updatePlayerHealthBar(player.scene);
+
+  // Visual feedback
+  player.scene.cameras.main.shake(150, 0.05);
+
+  // Check for game over
+  if (playerHealth <= 0) {
+    // Game over logic
+    player.scene.add
+      .text(400, 300, "GAME OVER", {
+        fontSize: "64px",
+        color: "#ff0000",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0);
+
+    // Disable player
+    player.disableBody(true, false);
+    player.setTint(0xff0000);
   }
 }
