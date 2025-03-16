@@ -22,7 +22,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: "arcade",
     arcade: {
       gravity: { x: 0, y: 0 },
-      debug: true, // Enable debug rendering
+      debug: false, // Enable debug rendering
     },
   },
   scene: {
@@ -72,6 +72,18 @@ function preload(this: Phaser.Scene) {
     frameHeight: 16,
   });
 
+  // Load the new dungeon floor tileset
+  this.load.spritesheet("dungeon_floor", "assets/tilesets/dungeon_floors.png", {
+    frameWidth: 16,
+    frameHeight: 16,
+  });
+
+  // Load the new dungeon wall tileset
+  this.load.spritesheet("dungeon_wall", "assets/tilesets/dungeon_walls.png", {
+    frameWidth: 16,
+    frameHeight: 16,
+  });
+
   // Load enemy crab sprite sheet
   this.load.spritesheet("enemy_crab", "assets/characters/enemy_crab.png", {
     frameWidth: 48,
@@ -102,6 +114,12 @@ function preload(this: Phaser.Scene) {
   this.load.spritesheet("enemy_bite_1", "assets/attack/enemy_bite_1.png", {
     frameWidth: 32,
     frameHeight: 32,
+  });
+
+  // Load enemy swipe animation
+  this.load.spritesheet("enemy_swipe", "assets/attack/enemy_swipe.png", {
+    frameWidth: 64,
+    frameHeight: 48,
   });
 
   // Load death animation
@@ -366,6 +384,17 @@ function create(this: Phaser.Scene) {
     repeat: 0,
   });
 
+  // Create enemy swipe animation
+  this.anims.create({
+    key: "enemy_swipe",
+    frames: this.anims.generateFrameNumbers("enemy_swipe", {
+      start: 0,
+      end: 4,
+    }),
+    frameRate: 12,
+    repeat: 0,
+  });
+
   // Create attack 2 animation
   this.anims.create({
     key: "attack2",
@@ -470,7 +499,8 @@ function create(this: Phaser.Scene) {
       // Only proceed if the enemy isn't already biting and player isn't in cooldown
       if (
         (enemy.anims.currentAnim &&
-          enemy.anims.currentAnim.key === "enemy_bite") ||
+          (enemy.anims.currentAnim.key === "enemy_bite" ||
+            enemy.anims.currentAnim.key === "enemy_swipe")) ||
         attackCooldown
       ) {
         return;
@@ -482,32 +512,32 @@ function create(this: Phaser.Scene) {
         attackCooldown = false;
       });
 
-      // Play bite animation
-      const biteAnim = enemy.scene.add.sprite(enemy.x, enemy.y, "enemy_bite_1");
-      biteAnim.setScale(3);
-      biteAnim.setDepth(15); // Above player and enemy
-      biteAnim.anims.play("enemy_bite");
+      // Play swipe animation instead of bite
+      const swipeAnim = enemy.scene.add.sprite(enemy.x, enemy.y, "enemy_swipe");
+      swipeAnim.setScale(2); // Adjusted scale for the larger swipe animation
+      swipeAnim.setDepth(15); // Above player and enemy
+      swipeAnim.anims.play("enemy_swipe");
 
-      // Position the bite animation between player and enemy
+      // Position the swipe animation between player and enemy
       const midX = (playerSprite.x + enemy.x) / 2;
       const midY = (playerSprite.y + enemy.y) / 2;
-      biteAnim.setPosition(midX, midY);
+      swipeAnim.setPosition(midX, midY);
 
-      // Rotate the bite animation to face the player
+      // Rotate the swipe animation to face the player
       const angle = Phaser.Math.Angle.Between(
         enemy.x,
         enemy.y,
         playerSprite.x,
         playerSprite.y
       );
-      biteAnim.setRotation(angle);
+      swipeAnim.setRotation(angle);
 
       // Damage the player
       playerTakeDamage(10);
 
-      // Destroy the bite animation when it completes
-      biteAnim.once("animationcomplete", () => {
-        biteAnim.destroy();
+      // Destroy the swipe animation when it completes
+      swipeAnim.once("animationcomplete", () => {
+        swipeAnim.destroy();
       });
 
       // Apply knockback to the player
@@ -517,9 +547,19 @@ function create(this: Phaser.Scene) {
       playerSprite.setVelocity(knockbackX, knockbackY);
 
       // Visual feedback - flash the player red
-      playerSprite.setTint(0xff0000);
-      playerSprite.scene.time.delayedCall(200, () => {
-        playerSprite.clearTint();
+      playerSprite.scene.tweens.add({
+        targets: playerSprite,
+        tint: 0xff0000,
+        ease: "Linear",
+        duration: 300,
+        onComplete: () => {
+          playerSprite.scene.tweens.add({
+            targets: playerSprite,
+            tint: 0xffffff,
+            ease: "Linear",
+            duration: 300,
+          });
+        },
       });
     },
     undefined,
@@ -982,7 +1022,7 @@ function performAttack2(scene: Phaser.Scene) {
       }
 
       // Apply knockback
-      if (enemy.active) {
+      if (enemy && enemy.active) {
         enemy.setVelocity(knockbackX, knockbackY);
       }
 

@@ -1,0 +1,145 @@
+rules for map building
+
+TOP_LEFT can
+  - have TOP_1 on the right
+  - have LEFT below
+  - have TOP_RIGHT on the right
+  - have BOTTOM_LEFT below
+  - have WALL on the right
+
+TOP_RIGHT can
+  - have TOP_1 on the left
+  - have LEFT below
+  - have TOP_LEFT on the left
+  - have BOTTOM_LEFT below
+  - have WALL on the right
+
+TOP_1 can
+  - have TOP_2 on the right
+  - have TOP_RIGHT on the right
+  - have TOP_LEFT on the left
+  - have LEFT on the left
+
+TOP_2 can
+  - have TOP_1 on the left
+  - have TOP_RIGHT on the right
+  - have TOP_LEFT on the left
+  - have LEFT on the left
+
+
+LEFT can
+  - have TOP_1 on the right
+  - have LEFT below
+  - have TOP_RIGHT on the right
+  - have LEFT_CONNECT_BOTTOM below
+  - have BOTTOM_LEFT below
+  - have WALL on the right
+
+LEFT_CONNECT_BOTTOM can
+  - have TOP_1 on the right
+  - have LEFT below
+  - have TOP_RIGHT on the right
+  - have LEFT_CONNECT_BOTTOM below
+  - have BOTTOM_LEFT below
+  - have WALL on the right
+
+BOTTOM_LEFT can
+  - have TOP_1 on the right
+  - have LEFT below
+  - have TOP_RIGHT on the right
+  - have LEFT_CONNECT_BOTTOM below
+  - have BOTTOM_LEFT below
+  - have WALL on the right
+
+WALL can
+  - have TOP_1 on the right
+  - have LEFT below
+  - have TOP_RIGHT on the right
+  - have LEFT_CONNECT_BOTTOM below
+  - have BOTTOM_LEFT below
+  - have WALL on the right
+
+
+
+
+
+//////////////////
+Wall Connection Rules
+Each tile in the map should be placed based on its neighbors.
+
+1. Horizontal Walls and Top Corners
+TOP_LEFT (0) → Use when there is a wall to the right and below.
+TOP_1 (1) → Use when there are walls to the left and right.
+TOP_2 (2) → Same as TOP_1, but for aesthetic variation.
+TOP_RIGHT (3) → Use when there is a wall to the left and below.
+2. Vertical Walls
+LEFT (6) → Use when there are walls above and below.
+RIGHT (9) → Use when there are walls above and below.
+3. Connections to the Floor (Bottom Walls)
+BOTTOM_LEFT (12) → Use when there is a wall above and floor to the right.
+BOTTOM_1_LOWER (13) → Use when there is a wall above and floor on both sides.
+BOTTOM_1_HIGHER (7) → A variation of BOTTOM_1_LOWER for visual detail.
+BOTTOM_2_LOWER (14) → Another variation of BOTTOM_1_LOWER.
+BOTTOM_2_HIGHER (8) → A variation of BOTTOM_2_LOWER.
+BOTTOM_RIGHT (15) → Use when there is a wall above and floor to the left.
+4. Inner Corner Connections
+LEFT_CONNECT_BOTTOM (10) → Use when there is a wall to the right and floor below.
+RIGHT_CONNECT_BOTTOM (11) → Use when there is a wall to the left and floor below.
+5. Solid Wall Block
+WALL (18) → Use when there are walls in all directions.
+
+and some layout examples
+
+ X X X X X  
+  X _ _ _ X  
+  X _ _ _ X  
+  X X _ X X  
+    X X X    
+Tile Assignments
+markdown
+Copiar
+Editar
+  0  1  2  3  X  
+  6  _  _  _  9  
+  6  _  _  _  9  
+  12 13 _ 15 X  
+     12 15      
+The top row uses TOP_LEFT (0), TOP_1 (1), TOP_2 (2), TOP_RIGHT (3).
+The sides use LEFT (6) and RIGHT (9).
+The entrance (bottom) uses BOTTOM_LEFT (12), BOTTOM_1_LOWER (13), BOTTOM_RIGHT (15).
+
+X X X X X X X  
+  X _ _ _ _ _ X  
+  X _ X X X _ X  
+  X _ X _ X _ X  
+  X X X _ X X X  
+Tile Assignments
+Copiar
+Editar
+  0  1  1  1  1  3  X  
+  6  _  _  _  _  _  9  
+  6  _  0  1  3  _  9  
+  6  _  6  _  9  _  9  
+  12 13 12 _ 15 15 X  
+The top row is a continuous TOP wall.
+The hallway sides use LEFT (6) and RIGHT (9).
+The inner walls form a room with an opening.
+The bottom exit uses BOTTOM_LEFT (12), BOTTOM_1_LOWER (13), and BOTTOM_RIGHT (15).
+
+ X X X X X X X  
+  X _ _ _ X _ X  
+  X _ X _ X _ X  
+  X _ X _ _ _ X  
+  X X X X X X X  
+Tile Assignments
+Copiar
+Editar
+  0  1  1  1  1  3  X  
+  6  _  _  _  9  _  9  
+  6  _  6  _  9  _  9  
+  6  _  6  _  _  _  9  
+  12 13 12 1 15 15 X  
+The room has a solid structure with openings in the middle.
+The walls adjust dynamically to ensure correct transitions.
+
+adjust map generation based on that

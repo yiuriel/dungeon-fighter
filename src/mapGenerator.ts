@@ -24,6 +24,7 @@ export const TILES = {
   },
   // Wall tiles (row 2)
   WALL: {
+    WALL: 18,
     TOP_LEFT: 0,
     TOP_1: 1,
     TOP_2: 2,
@@ -88,7 +89,127 @@ export function generateMap(): number[][] {
     }
   }
 
+  // Ensure there are no isolated areas
+  ensureConnectivity(map, centerX, centerY);
+
   return map;
+}
+
+// Ensure all floor tiles are connected (no isolated areas)
+function ensureConnectivity(map: number[][], startX: number, startY: number): void {
+  // Create a copy of the map to mark visited tiles
+  const visited: boolean[][] = [];
+  for (let y = 0; y < mapHeight; y++) {
+    visited[y] = [];
+    for (let x = 0; x < mapWidth; x++) {
+      visited[y][x] = false;
+    }
+  }
+
+  // Use flood fill algorithm to mark all accessible floor tiles
+  floodFill(map, visited, startX, startY);
+
+  // Find all floor tiles that weren't visited and connect them
+  for (let y = 1; y < mapHeight - 1; y++) {
+    for (let x = 1; x < mapWidth - 1; x++) {
+      if (map[y][x] === 0 && !visited[y][x]) {
+        // This is an isolated floor tile, connect it to the main area
+        connectToMainArea(map, visited, x, y);
+      }
+    }
+  }
+}
+
+// Flood fill algorithm to mark all accessible floor tiles
+function floodFill(map: number[][], visited: boolean[][], x: number, y: number): void {
+  // Check if position is valid
+  if (
+    x < 0 ||
+    x >= mapWidth ||
+    y < 0 ||
+    y >= mapHeight ||
+    map[y][x] === 1 || // Wall
+    visited[y][x] // Already visited
+  ) {
+    return;
+  }
+
+  // Mark as visited
+  visited[y][x] = true;
+
+  // Visit neighbors (4 directions)
+  floodFill(map, visited, x + 1, y);
+  floodFill(map, visited, x - 1, y);
+  floodFill(map, visited, x, y + 1);
+  floodFill(map, visited, x, y - 1);
+}
+
+// Connect an isolated area to the main area
+function connectToMainArea(map: number[][], visited: boolean[][], x: number, y: number): void {
+  // Find the closest visited floor tile
+  let closestX = -1;
+  let closestY = -1;
+  let minDistance = Infinity;
+
+  for (let ny = 1; ny < mapHeight - 1; ny++) {
+    for (let nx = 1; nx < mapWidth - 1; nx++) {
+      if (map[ny][nx] === 0 && visited[ny][nx]) {
+        const distance = Math.sqrt(Math.pow(nx - x, 2) + Math.pow(ny - y, 2));
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestX = nx;
+          closestY = ny;
+        }
+      }
+    }
+  }
+
+  // If we found a visited floor tile, create a path to it
+  if (closestX !== -1 && closestY !== -1) {
+    createPath(map, x, y, closestX, closestY);
+    
+    // Mark the newly connected area as visited
+    const newVisited: boolean[][] = [];
+    for (let ny = 0; ny < mapHeight; ny++) {
+      newVisited[ny] = [];
+      for (let nx = 0; nx < mapWidth; nx++) {
+        newVisited[ny][nx] = visited[ny][nx];
+      }
+    }
+    floodFill(map, newVisited, x, y);
+    
+    // Update the visited array
+    for (let ny = 0; ny < mapHeight; ny++) {
+      for (let nx = 0; nx < mapWidth; nx++) {
+        visited[ny][nx] = newVisited[ny][nx];
+      }
+    }
+  }
+}
+
+// Create a path between two points
+function createPath(map: number[][], x1: number, y1: number, x2: number, y2: number): void {
+  // Simple line drawing algorithm
+  const dx = Math.abs(x2 - x1);
+  const dy = Math.abs(y2 - y1);
+  const sx = x1 < x2 ? 1 : -1;
+  const sy = y1 < y2 ? 1 : -1;
+  let err = dx - dy;
+
+  while (x1 !== x2 || y1 !== y2) {
+    // Set current position to floor
+    map[y1][x1] = 0;
+
+    const e2 = 2 * err;
+    if (e2 > -dy) {
+      err -= dy;
+      x1 += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y1 += sy;
+    }
+  }
 }
 
 // Apply cellular automata rules to smooth the map
@@ -183,7 +304,7 @@ export function renderMap(
     }
   }
 
-  // Then create all floor tiles
+  // First pass: Add floor tiles
   for (let y = 0; y < mapHeight; y++) {
     for (let x = 0; x < mapWidth; x++) {
       const tileX = x * tileSize;
@@ -192,19 +313,41 @@ export function renderMap(
       // Only add floor tiles where the map indicates (not on walls)
       if (map[y][x] === 0) {
         // Select floor tile type based on position and randomness
-        let tileIndex = TILES.FLOOR.BASIC;
+        let tileIndex;
         const rand = Math.random();
-        if (rand < 0.1) {
-          tileIndex = TILES.FLOOR.CRACKED;
-        } else if (rand < 0.2) {
-          tileIndex = TILES.FLOOR.DIRTY;
+
+        // Distribute different floor tile types
+        if (rand < 0.5) {
+          tileIndex = TILES.FLOOR.BASIC;
+        } else if (rand < 0.6) {
+          tileIndex = TILES.FLOOR.FLOOR_1;
+        } else if (rand < 0.7) {
+          tileIndex = TILES.FLOOR.FLOOR_2;
+        } else if (rand < 0.75) {
+          tileIndex = TILES.FLOOR.FLOOR_3;
+        } else if (rand < 0.8) {
+          tileIndex = TILES.FLOOR.FLOOR_4;
+        } else if (rand < 0.85) {
+          tileIndex = TILES.FLOOR.FLOOR_5;
+        } else if (rand < 0.9) {
+          tileIndex = TILES.FLOOR.FLOOR_6;
+        } else if (rand < 0.92) {
+          tileIndex = TILES.FLOOR.FLOOR_7;
+        } else if (rand < 0.94) {
+          tileIndex = TILES.FLOOR.FLOOR_8;
+        } else if (rand < 0.96) {
+          tileIndex = TILES.FLOOR.FLOOR_9;
+        } else if (rand < 0.98) {
+          tileIndex = TILES.FLOOR.FLOOR_10;
+        } else {
+          tileIndex = TILES.FLOOR.FLOOR_11;
         }
 
         // Create the floor tile
         const floorTile = scene.add.sprite(
           tileX + tileSize / 2,
           tileY + tileSize / 2,
-          "tileset",
+          "dungeon_floor",
           tileIndex
         );
         floorTile.setScale(2); // Scale up the tile to match tileSize
@@ -221,20 +364,34 @@ export function renderMap(
           const decoration = scene.add.sprite(
             tileX + tileSize / 2,
             tileY + tileSize / 2,
-            "tileset",
+            "tileset", // Keep using the original tileset for decorations
             decorationIndex
           );
           decoration.setScale(2);
           decoration.setDepth(1); // Above floor, below walls
           decorations.add(decoration);
         }
-      } else {
+      }
+    }
+  }
+
+  // Second pass: Add wall tiles with proper connections
+  for (let y = 0; y < mapHeight; y++) {
+    for (let x = 0; x < mapWidth; x++) {
+      if (map[y][x] === 1) {
+        // This is a wall
+        const tileX = x * tileSize;
+        const tileY = y * tileSize;
+
+        // Use only the WALL tile for all walls
+        const wallTileIndex = TILES.WALL.WALL;
+
         // Create wall tile
         const wall = walls.create(
           tileX + tileSize / 2,
           tileY + tileSize / 2,
-          "tileset",
-          TILES.WALL.BASIC
+          "dungeon_wall",
+          wallTileIndex
         );
         wall.setScale(2);
         wall.setDepth(2); // Set walls to be above floor and decorations
@@ -242,7 +399,7 @@ export function renderMap(
         // Update the physics body size to match the scaled sprite
         if (wall.body) {
           wall.body.setSize(tileSize, tileSize);
-          wall.body.setOffset(-6, -8);
+          wall.body.setOffset(-6, -6);
         }
       }
     }
