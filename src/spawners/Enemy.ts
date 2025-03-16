@@ -69,14 +69,61 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   updateHealthBar() {
     this.healthBar.clear();
 
-    // Background of health bar (red)
-    this.healthBar.fillStyle(0xff0000);
-    this.healthBar.fillRect(this.x - 15, this.y - 20, 30, 5);
+    const barWidth = 28;
+    const barHeight = 6;
+    const borderRadius = 4;
+    const padding = 1;
 
-    // Health amount (green)
-    this.healthBar.fillStyle(0x00ff00);
-    const healthWidth = Math.max(0, (this.health / this.maxHealth) * 30);
-    this.healthBar.fillRect(this.x - 15, this.y - 20, healthWidth, 5);
+    // Position above the enemy
+    const x = this.x - barWidth / 2;
+    const y = this.y - this.height / 2 - 10;
+
+    // Background (dark with transparency)
+    this.healthBar.fillStyle(0x333333, 0.7);
+    this.healthBar.fillRoundedRect(x, y, barWidth, barHeight, borderRadius);
+
+    // Border
+    this.healthBar.lineStyle(1, 0xffffff, 0.5);
+    this.healthBar.strokeRoundedRect(x, y, barWidth, barHeight, borderRadius);
+
+    // Health fill
+    if (this.health > 0) {
+      // Calculate health percentage
+      const healthPercent = this.health / this.maxHealth;
+      const healthWidth = Math.max(0, healthPercent * (barWidth - padding * 2));
+
+      // Choose color based on health percentage
+      let fillColor;
+      if (healthPercent > 0.6) {
+        fillColor = 0x44ff44; // Green for high health
+      } else if (healthPercent > 0.3) {
+        fillColor = 0xffff00; // Yellow for medium health
+      } else {
+        fillColor = 0xff4444; // Red for low health
+      }
+
+      // Draw the health bar with rounded corners
+      this.healthBar.fillStyle(fillColor, 1);
+
+      // Only use rounded corners if there's enough health to show them
+      if (healthWidth > borderRadius * 2) {
+        this.healthBar.fillRoundedRect(
+          x + padding,
+          y + padding,
+          healthWidth,
+          barHeight - padding * 2,
+          borderRadius - 1
+        );
+      } else {
+        // For very low health, just draw a rectangle to avoid visual glitches
+        this.healthBar.fillRect(
+          x + padding,
+          y + padding,
+          healthWidth,
+          barHeight - padding * 2
+        );
+      }
+    }
   }
 
   takeDamage(amount: number, player: Phaser.Physics.Arcade.Sprite) {

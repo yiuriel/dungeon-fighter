@@ -1,5 +1,4 @@
-import { createEnemy } from "./spawners/Enemy";
-
+import { createEnemy } from "../spawners/Enemy";
 // Map generation constants and variables
 export const tileSize = 32; // Display size of tiles
 export let mapWidth = 40;
@@ -417,8 +416,9 @@ export function renderMap(
   }
 }
 
-// Spawn enemies at random positions on the map
+// Spawn enemies on the map
 export function spawnEnemies(
+  scene: Phaser.Scene,
   map: number[][],
   enemies: Phaser.Physics.Arcade.Group,
   additionalEnemies: number = 0
@@ -444,7 +444,7 @@ export function spawnEnemies(
       x = Math.floor(Math.random() * (mapWidth - 2)) + 1;
       y = Math.floor(Math.random() * (mapHeight - 2)) + 1;
 
-      // Check if position is a floor tile
+      // Check if position is a floor tile (value 0 is floor)
       const isFloor = map[y][x] === 0;
 
       // Check if position is far enough from player (at least 5 tiles)
@@ -468,16 +468,15 @@ export function spawnEnemies(
 
     // If we found a valid position, spawn an enemy
     if (validPosition) {
+      // Convert tile coordinates to pixel coordinates
+      const pixelX = x * tileSize + tileSize / 2;
+      const pixelY = y * tileSize + tileSize / 2;
+
       // Randomly choose between crab and octopus
       const enemyType = Math.random() < 0.5 ? "enemy_crab" : "enemy_octopus";
 
       // Create the appropriate enemy type using the factory function
-      const enemy = createEnemy(
-        enemies.scene,
-        x * tileSize + tileSize / 2,
-        y * tileSize + tileSize / 2,
-        enemyType
-      );
+      const enemy = createEnemy(scene, pixelX, pixelY, enemyType);
 
       // Add the enemy to the group
       enemies.add(enemy);

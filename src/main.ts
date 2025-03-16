@@ -7,10 +7,12 @@ import {
   spawnEnemies as spawnEnemiesFromGenerator,
   tileSize,
   TILES,
-} from "./mapGenerator";
+} from "./map/mapGenerator";
 import { Enemy } from "./spawners/Enemy";
 import { Projectile } from "./spawners/Projectile";
 import "./style.css";
+import { findSafePlayerPosition } from "./map/findSafePlayerPosition";
+import { NewLevelSign } from "./helpers/new.level.sign";
 
 // Game configuration
 const config: Phaser.Types.Core.GameConfig = {
@@ -58,6 +60,7 @@ let playerFacing = "down"; // Track player facing direction
 let currentLevel = 1; // Track current level
 let nextLevelSign: Phaser.GameObjects.Text | null = null; // Next level sign
 let nextLevelPortal: Phaser.GameObjects.Ellipse | null = null; // Portal visual
+let levelSignManager: NewLevelSign | null = null; // Level sign manager
 
 // Preload assets
 function preload(this: Phaser.Scene) {
@@ -171,10 +174,13 @@ function create(this: Phaser.Scene) {
   // Render the map
   renderMapFromGenerator(this, map, floorLayer, walls, decorations);
 
+  // Find a safe position for the player
+  const safePosition = findSafePlayerPosition(map);
+
   // Create player using the first frame (0)
   player = this.physics.add.sprite(
-    Math.floor(mapWidth / 2) * tileSize + tileSize / 2,
-    Math.floor(mapHeight / 2) * tileSize + tileSize / 2,
+    safePosition.x,
+    safePosition.y,
     "character",
     0 // Use the first frame
   );
@@ -187,7 +193,7 @@ function create(this: Phaser.Scene) {
     // Make the player's collision box 16x16 (smaller than the sprite)
     player.body.setSize(14, 14);
     // Center the collision box (offset to center the 16x16 hitbox in the sprite)
-    player.body.setOffset(1, 7);
+    player.body.setOffset(2, 8);
   }
 
   // Create animations for the player
@@ -452,7 +458,7 @@ function create(this: Phaser.Scene) {
   });
 
   // Set player depth to be above floor and walls
-  player.setDepth(10);
+  player.setDepth(50);
 
   // Enable physics on the player
   // Don't use world bounds, we'll handle this with walls
@@ -628,7 +634,7 @@ function create(this: Phaser.Scene) {
   updatePlayerHealthBar(this);
 
   // Spawn enemies
-  spawnEnemiesFromGenerator(map, enemies);
+  spawnEnemiesFromGenerator(this, map, enemies);
 
   // Start with idle animation
   player.anims.play("idle_down");
@@ -682,29 +688,18 @@ function update(this: Phaser.Scene, time: number) {
   });
 
   // If next level sign is already showing, check if player is touching it
-  if (nextLevelSign) {
-    const playerBounds = player.getBounds();
-    const signBounds = nextLevelSign.getBounds();
-    const portalBounds = nextLevelPortal?.getBounds();
-
-    if (
-      Phaser.Geom.Rectangle.Overlaps(playerBounds, signBounds) ||
-      (portalBounds &&
-        Phaser.Geom.Rectangle.Overlaps(playerBounds, portalBounds))
-    ) {
+  if (nextLevelSign && levelSignManager) {
+    if (levelSignManager.isPlayerTouchingPortal()) {
       // Go to next level
 
       // Increment level counter
       currentLevel++;
 
       // Clear existing objects
-      if (nextLevelSign) {
-        nextLevelSign.destroy();
+      if (levelSignManager) {
+        levelSignManager.destroy();
+        levelSignManager = null;
         nextLevelSign = null;
-      }
-
-      if (nextLevelPortal) {
-        nextLevelPortal.destroy();
         nextLevelPortal = null;
       }
 
@@ -719,9 +714,14 @@ function update(this: Phaser.Scene, time: number) {
 
       // Clear and recreate walls
       walls.clear(true, true);
+      floorLayer.clear(true, true);
 
       // Render the new map
       renderMapFromGenerator(this, map, floorLayer, walls, decorations);
+
+      // Find a safe position for the player (not inside a wall)
+      const safePosition = findSafePlayerPosition(map);
+      player.setPosition(safePosition.x, safePosition.y);
 
       // Set up collisions again
       this.physics.add.collider(player, walls);
@@ -735,8 +735,7 @@ function update(this: Phaser.Scene, time: number) {
       );
 
       // Spawn more enemies based on the current level
-      const enemyCount = 5 + currentLevel * 2; // Increase enemy count with each level
-      spawnEnemiesFromGenerator(map, enemies, enemyCount);
+      spawnEnemiesFromGenerator(this, map, enemies, currentLevel - 1);
 
       // Reset player health and give bonus
       playerHealth = Math.min(100, playerHealth + 20); // Heal player by 20, up to max 100
@@ -776,50 +775,11 @@ function update(this: Phaser.Scene, time: number) {
 
   // If no active enemies and no next level sign, show next level sign
   if (activeEnemies.length === 0 && !nextLevelSign) {
-    // Create a glowing portal near the player
-    const portalX = player.x + 100; // Place it a bit ahead of the player
-    const portalY = player.y;
-
-    // Create portal glow effect
-    nextLevelPortal = this.add.ellipse(portalX, portalY, 80, 80, 0x00ffff, 0.3);
-    nextLevelPortal.setDepth(5);
-
-    // Add pulsing animation to the glow
-    this.tweens.add({
-      targets: nextLevelPortal,
-      alpha: 0.6,
-      scale: 1.2,
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
-    });
-
-    // Create the next level text
-    nextLevelSign = this.add
-      .text(
-        portalX,
-        portalY - 60,
-        `LEVEL ${currentLevel} COMPLETE!\nENTER PORTAL`,
-        {
-          fontSize: "20px",
-          color: "#ffffff",
-          stroke: "#000000",
-          strokeThickness: 4,
-          align: "center",
-        }
-      )
-      .setOrigin(0.5)
-      .setDepth(10);
-
-    // Add a floating animation to the text
-    this.tweens.add({
-      targets: nextLevelSign,
-      y: portalY - 70,
-      duration: 1500,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
+    // Create a new level sign using our class
+    levelSignManager = new NewLevelSign(this, player, currentLevel);
+    const { sign, portal } = levelSignManager.create();
+    nextLevelSign = sign;
+    nextLevelPortal = portal;
 
     // Play a victory sound
     // this.sound.play('level-complete');
@@ -1205,18 +1165,57 @@ function updatePlayerHealthBar(scene: Phaser.Scene) {
 
   playerHealthBar.clear();
 
-  // Background
-  playerHealthBar.fillStyle(0x000000, 0.5);
-  playerHealthBar.fillRect(10, 10, 200, 20);
+  const barWidth = 200;
+  const barHeight = 24;
+  const borderRadius = 8;
+  const borderWidth = 2;
+  const padding = 2;
+  const x = 15;
+  const y = 15;
+
+  // Draw shadow
+  playerHealthBar.fillStyle(0x000000, 0.3);
+  playerHealthBar.fillRoundedRect(
+    x + 2,
+    y + 2,
+    barWidth,
+    barHeight,
+    borderRadius
+  );
+
+  // Background (dark gray with transparency)
+  playerHealthBar.fillStyle(0x333333, 0.7);
+  playerHealthBar.fillRoundedRect(x, y, barWidth, barHeight, borderRadius);
 
   // Border
-  playerHealthBar.lineStyle(2, 0xffffff, 1);
-  playerHealthBar.strokeRect(10, 10, 200, 20);
+  playerHealthBar.lineStyle(borderWidth, 0xffffff, 0.8);
+  playerHealthBar.strokeRoundedRect(x, y, barWidth, barHeight, borderRadius);
 
-  // Health amount
-  const healthWidth = (playerHealth / 100) * 200;
-  playerHealthBar.fillStyle(0x00ff00);
-  playerHealthBar.fillRect(10, 10, healthWidth, 20);
+  // Health amount (gradient from green to yellow to red based on health)
+  const healthPercent = playerHealth / 100;
+  const healthWidth = Math.max(0, healthPercent * (barWidth - padding * 2));
+
+  // Choose color based on health percentage
+  let fillColor;
+  if (healthPercent > 0.6) {
+    fillColor = 0x44ff44; // Green for high health
+  } else if (healthPercent > 0.3) {
+    fillColor = 0xffff00; // Yellow for medium health
+  } else {
+    fillColor = 0xff4444; // Red for low health
+  }
+
+  // Inner health bar with smaller radius
+  if (healthWidth > 0) {
+    playerHealthBar.fillStyle(fillColor, 1);
+    playerHealthBar.fillRoundedRect(
+      x + padding,
+      y + padding,
+      healthWidth,
+      barHeight - padding * 2,
+      borderRadius - 2
+    );
+  }
 
   // Make sure health bar is fixed to camera
   playerHealthBar.setScrollFactor(0);
@@ -1225,22 +1224,23 @@ function updatePlayerHealthBar(scene: Phaser.Scene) {
   // Health text
   if (!scene.children.getByName("healthText")) {
     scene.add
-      .text(110, 20, `Health: ${playerHealth}/100`, {
-        fontSize: "16px",
+      .text(x + barWidth / 2, y + barHeight / 2, `${playerHealth}/100`, {
+        fontSize: "14px",
+        fontFamily: "Arial",
         color: "#ffffff",
+        stroke: "#000000",
+        strokeThickness: 3,
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(100)
+      .setDepth(101)
       .setName("healthText");
   } else {
     const healthText = scene.children.getByName(
       "healthText"
     ) as Phaser.GameObjects.Text;
-    healthText.setText(`Health: ${playerHealth}/100`);
-    healthText.setPosition(110, 20);
-    healthText.setScrollFactor(0);
-    healthText.setDepth(100);
+    healthText.setText(`${playerHealth}/100`);
+    healthText.setPosition(x + barWidth / 2, y + barHeight / 2);
   }
 }
 
