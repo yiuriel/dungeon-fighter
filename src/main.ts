@@ -8,18 +8,14 @@ import {
   tileSize,
   TILES,
 } from "./map/mapGenerator";
-import { Enemy } from "./spawners/Enemy";
-import { Projectile } from "./spawners/Projectile";
+import { Enemy } from "./sprites/Enemy";
+import { Projectile } from "./sprites/Projectile";
 import "./style.css";
 import { findSafePlayerPosition } from "./map/findSafePlayerPosition";
 import { NewLevelSign } from "./helpers/new.level.sign";
 import { StartScreen } from "./helpers/start.screen";
 
 class GameScene extends Phaser.Scene {
-  constructor() {
-    super();
-  }
-
   // Game variables
   player!: Phaser.Physics.Arcade.Sprite;
   cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -56,10 +52,12 @@ class GameScene extends Phaser.Scene {
     shield?: Phaser.GameObjects.Container;
   } = {};
 
+  constructor() {
+    super();
+  }
+
   // Preload assets
   preload() {
-    console.log("Preloading assets", this);
-
     // Load character sprite sheet
     this.load.spritesheet("character", "assets/characters/mage.png", {
       frameWidth: 16,
@@ -484,8 +482,6 @@ class GameScene extends Phaser.Scene {
     // Generate procedural map
     this.map = generateMap();
 
-    console.log(this);
-
     // Render the map
     renderMapFromGenerator(
       this,
@@ -534,101 +530,7 @@ class GameScene extends Phaser.Scene {
     this.physics.add.collider(
       this.player,
       this.enemies,
-      (playerObj, enemyObj) => {
-        // Cast to proper types
-        const playerSprite = playerObj as Phaser.Physics.Arcade.Sprite;
-        const enemy = enemyObj as Enemy;
-
-        // If shield is active, don't take damage
-        if (this.shieldActive) {
-          // Just push the enemy back slightly
-          const angle = Phaser.Math.Angle.Between(
-            playerSprite.x,
-            playerSprite.y,
-            enemy.x,
-            enemy.y
-          );
-          const pushForce = 150;
-          const pushX = Math.cos(angle) * pushForce;
-          const pushY = Math.sin(angle) * pushForce;
-          enemy.setVelocity(pushX, pushY);
-
-          // Visual feedback on the shield
-          if (this.shieldSprite) {
-            this.shieldSprite.setTint(0x00ffff);
-            this.time.delayedCall(100, () => {
-              if (this.shieldSprite) this.shieldSprite.clearTint();
-            });
-          }
-          return;
-        }
-
-        // Only proceed if the enemy isn't already biting and player isn't in cooldown
-        if (
-          (enemy.anims.currentAnim &&
-            (enemy.anims.currentAnim.key === "enemy_bite" ||
-              enemy.anims.currentAnim.key === "enemy_swipe")) ||
-          this.attackCooldown
-        ) {
-          return;
-        }
-
-        // Set attack cooldown
-        this.attackCooldown = true;
-        this.time.delayedCall(1000, () => {
-          this.attackCooldown = false;
-        });
-
-        // Play swipe animation instead of bite
-        const swipeAnim = this.add.sprite(enemy.x, enemy.y, "enemy_swipe");
-        swipeAnim.setScale(2); // Adjusted scale for the larger swipe animation
-        swipeAnim.setDepth(15); // Above player and enemy
-        swipeAnim.anims.play("enemy_swipe");
-
-        // Position the swipe animation between player and enemy
-        const midX = (playerSprite.x + enemy.x) / 2;
-        const midY = (playerSprite.y + enemy.y) / 2;
-        swipeAnim.setPosition(midX, midY);
-
-        // Rotate the swipe animation to face the player
-        const angle = Phaser.Math.Angle.Between(
-          enemy.x,
-          enemy.y,
-          playerSprite.x,
-          playerSprite.y
-        );
-        swipeAnim.setRotation(angle);
-
-        // Damage the player
-        this.playerTakeDamage(10);
-
-        // Destroy the swipe animation when it completes
-        swipeAnim.once("animationcomplete", () => {
-          swipeAnim.destroy();
-        });
-
-        // Apply knockback to the player
-        const knockbackForce = 100;
-        const knockbackX = Math.cos(angle) * knockbackForce;
-        const knockbackY = Math.sin(angle) * knockbackForce;
-        playerSprite.setVelocity(knockbackX, knockbackY);
-
-        // Visual feedback - flash the player red
-        this.tweens.add({
-          targets: playerSprite,
-          tint: 0xff0000,
-          ease: "Linear",
-          duration: 300,
-          onComplete: () => {
-            this.tweens.add({
-              targets: playerSprite,
-              tint: 0xffffff,
-              ease: "Linear",
-              duration: 300,
-            });
-          },
-        });
-      },
+      this.handlePlayerEnemyCollision,
       undefined,
       this
     );
@@ -709,7 +611,7 @@ class GameScene extends Phaser.Scene {
   // Create cooldown indicators for player abilities
   createCooldownIndicators() {
     const iconSize = 40;
-    const iconSpacing = 10;
+    const iconSpacing = 20;
     const startX = 15;
     const startY = 55;
 
@@ -773,9 +675,9 @@ class GameScene extends Phaser.Scene {
 
     // Key binding text
     const keyLabel = this.add
-      .text(size / 2, size / 2 - 2, keyText, {
-        fontFamily: "Arial",
-        fontSize: "14px",
+      .text(size / 2, size / 2, keyText, {
+        fontFamily: "Monospace",
+        fontSize: "20px",
         color: "#ffffff",
         stroke: "#000000",
         strokeThickness: 2,
@@ -784,10 +686,12 @@ class GameScene extends Phaser.Scene {
 
     // Ability name below
     const nameLabel = this.add
-      .text(size / 2, size + 2, abilityName, {
+      .text(size / 2, size + 4, abilityName, {
         fontFamily: "Arial",
-        fontSize: "10px",
+        fontSize: "14px",
         color: "#ffffff",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0);
 
@@ -1013,6 +917,249 @@ class GameScene extends Phaser.Scene {
       if (enemy.update) {
         enemy.update(time, player);
       }
+    });
+
+    // Check if all enemies are defeated
+    const activeEnemies = this.enemies.getChildren().filter((enemy) => {
+      return (enemy as Phaser.Physics.Arcade.Sprite).active;
+    });
+
+    // Handle level completion logic
+    if (activeEnemies.length === 0 && !this.levelSignManager) {
+      this.showNextLevelSign();
+    }
+
+    // Check for level sign interaction
+    if (
+      this.levelSignManager &&
+      this.levelSignManager.isPlayerTouchingPortal()
+    ) {
+      this.goToNextLevel();
+    }
+  }
+
+  /**
+   * Show the next level sign and portal when all enemies are defeated
+   */
+  showNextLevelSign(): void {
+    // Create level sign manager
+    this.levelSignManager = new NewLevelSign(
+      this,
+      this.player,
+      this.currentLevel
+    );
+    this.levelSignManager.create();
+  }
+
+  /**
+   * Go to the next level
+   */
+  goToNextLevel(): void {
+    // Increment level counter
+    this.currentLevel++;
+
+    // Clear existing objects
+    if (this.levelSignManager) {
+      this.levelSignManager.destroy();
+      this.levelSignManager = null;
+    }
+
+    // Destroy all existing enemies
+    this.enemies.clear(true, true);
+
+    // Destroy all projectiles
+    this.projectiles.clear(true, true);
+
+    // Generate a new map
+    this.map = generateMap();
+
+    // Clear and recreate walls
+    this.walls.clear(true, true);
+    this.floorLayer.clear(true, true);
+    this.decorations.clear(true, true);
+
+    // Render the new map
+    renderMapFromGenerator(
+      this,
+      this.map,
+      this.floorLayer,
+      this.walls,
+      this.decorations
+    );
+
+    // Find a safe position for the player
+    const safePosition = findSafePlayerPosition(this.map);
+    this.player.setPosition(safePosition.x, safePosition.y);
+
+    // Set up collisions again
+    this.setupCollisions();
+
+    // Spawn enemies for the new level
+    spawnEnemiesFromGenerator(
+      this,
+      this.map,
+      this.enemies,
+      this.currentLevel - 1
+    );
+
+    // Reset player health and give bonus
+    this.playerHealth = Math.min(100, this.playerHealth + 20); // Heal player by 20, up to max 100
+    this.updatePlayerHealthBar();
+  }
+
+  setupCollisions(): void {
+    // Add collision between enemies and player
+    this.physics.add.collider(
+      this.player,
+      this.enemies,
+      this.handlePlayerEnemyCollision,
+      undefined,
+      this
+    );
+
+    // Add collision between enemies
+    this.physics.add.collider(this.enemies, this.enemies);
+
+    // Add collision between projectiles and walls
+    this.physics.add.collider(
+      this.projectiles,
+      this.walls,
+      this.handleProjectileWallCollision,
+      undefined,
+      this
+    );
+
+    // Add collision between projectiles and enemies
+    this.physics.add.overlap(
+      this.projectiles,
+      this.enemies,
+      this.handleProjectileEnemyCollision,
+      undefined,
+      this
+    );
+
+    // Create player attack area (invisible)
+    this.playerAttackArea = this.add.rectangle(
+      0,
+      0,
+      tileSize * 1.25,
+      tileSize * 1.25,
+      0xff0000,
+      0
+    );
+    this.physics.add.existing(this.playerAttackArea, false);
+    if (this.playerAttackArea.body) {
+      (
+        this.playerAttackArea.body as Phaser.Physics.Arcade.Body
+      ).setAllowGravity(false);
+    }
+
+    // Add overlap between attack area and enemies
+    this.physics.add.overlap(
+      this.playerAttackArea,
+      this.enemies,
+      this.handleAttackHit,
+      undefined,
+      this
+    );
+
+    // Set camera to follow player
+    const worldWidth = mapWidth * tileSize;
+    const worldHeight = mapHeight * tileSize;
+    this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+    this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+  }
+
+  handlePlayerEnemyCollision(playerSprite: any, enemy: any) {
+    // If shield is active, don't take damage
+    if (this.shieldActive) {
+      // Just push the enemy back slightly
+      const angle = Phaser.Math.Angle.Between(
+        playerSprite.x,
+        playerSprite.y,
+        enemy.x,
+        enemy.y
+      );
+      const pushForce = 150;
+      const pushX = Math.cos(angle) * pushForce;
+      const pushY = Math.sin(angle) * pushForce;
+      enemy.setVelocity(pushX, pushY);
+
+      // Visual feedback on the shield
+      if (this.shieldSprite) {
+        this.shieldSprite.setTint(0x00ffff);
+        this.time.delayedCall(100, () => {
+          if (this.shieldSprite) this.shieldSprite.clearTint();
+        });
+      }
+      return;
+    }
+
+    // Only proceed if the enemy isn't already biting and player isn't in cooldown
+    if (
+      (enemy.anims.currentAnim &&
+        (enemy.anims.currentAnim.key === "enemy_bite" ||
+          enemy.anims.currentAnim.key === "enemy_swipe")) ||
+      this.attackCooldown
+    ) {
+      return;
+    }
+
+    // Set attack cooldown
+    this.attackCooldown = true;
+    this.time.delayedCall(1000, () => {
+      this.attackCooldown = false;
+    });
+
+    // Play swipe animation instead of bite
+    const swipeAnim = this.add.sprite(enemy.x, enemy.y, "enemy_swipe");
+    swipeAnim.setScale(2); // Adjusted scale for the larger swipe animation
+    swipeAnim.setDepth(15); // Above player and enemy
+    swipeAnim.anims.play("enemy_swipe");
+
+    // Position the swipe animation between player and enemy
+    const midX = (playerSprite.x + enemy.x) / 2;
+    const midY = (playerSprite.y + enemy.y) / 2;
+    swipeAnim.setPosition(midX, midY);
+
+    // Rotate the swipe animation to face the player
+    const angle = Phaser.Math.Angle.Between(
+      enemy.x,
+      enemy.y,
+      playerSprite.x,
+      playerSprite.y
+    );
+    swipeAnim.setRotation(angle);
+
+    // Damage the player
+    this.playerTakeDamage(10);
+
+    // Destroy the swipe animation when it completes
+    swipeAnim.once("animationcomplete", () => {
+      swipeAnim.destroy();
+    });
+
+    // Apply knockback to the player
+    const knockbackForce = 100;
+    const knockbackX = Math.cos(angle) * knockbackForce;
+    const knockbackY = Math.sin(angle) * knockbackForce;
+    playerSprite.setVelocity(knockbackX, knockbackY);
+
+    // Visual feedback - flash the player red
+    this.tweens.add({
+      targets: playerSprite,
+      tint: 0xff0000,
+      ease: "Linear",
+      duration: 300,
+      onComplete: () => {
+        this.tweens.add({
+          targets: playerSprite,
+          tint: 0xffffff,
+          ease: "Linear",
+          duration: 300,
+        });
+      },
     });
   }
 
