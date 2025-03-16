@@ -9,15 +9,35 @@ export let mapHeight = 32;
 export const TILES = {
   // Floor tiles (row 1)
   FLOOR: {
-    BASIC: 269,
-    CRACKED: 257,
-    DIRTY: 258,
+    BASIC: 0,
+    FLOOR_1: 1,
+    FLOOR_2: 2,
+    FLOOR_3: 3,
+    FLOOR_4: 4,
+    FLOOR_5: 5,
+    FLOOR_6: 6,
+    FLOOR_7: 7,
+    FLOOR_8: 8,
+    FLOOR_9: 9,
+    FLOOR_10: 10,
+    FLOOR_11: 11,
   },
   // Wall tiles (row 2)
   WALL: {
-    BASIC: 16,
-    DAMAGED: 16,
-    DECORATED: 16,
+    TOP_LEFT: 0,
+    TOP_1: 1,
+    TOP_2: 2,
+    TOP_RIGHT: 3,
+    LEFT: 6,
+    LEFT_CONNECT_BOTTOM: 10,
+    RIGHT_CONNECT_BOTTOM: 11,
+    RIGHT: 9,
+    BOTTOM_LEFT: 12,
+    BOTTOM_1_LOWER: 13,
+    BOTTOM_1_HIGHER: 7,
+    BOTTOM_2_LOWER: 14,
+    BOTTOM_2_HIGHER: 8,
+    BOTTOM_RIGHT: 15,
   },
   // Decorations (row 3-4)
   DECORATION: {
@@ -282,18 +302,18 @@ export function spawnEnemies(
     if (validPosition) {
       // Randomly choose between crab and octopus
       const enemyType = Math.random() < 0.5 ? "enemy_crab" : "enemy_octopus";
-      
+
       // Create the appropriate enemy type using the factory function
       const enemy = createEnemy(
-        enemies.scene, 
+        enemies.scene,
         x * tileSize + tileSize / 2,
         y * tileSize + tileSize / 2,
         enemyType
       );
-      
+
       // Add the enemy to the group
       enemies.add(enemy);
-      
+
       // Make sure the enemy is active and visible
       enemy.setActive(true);
       enemy.setVisible(true);
