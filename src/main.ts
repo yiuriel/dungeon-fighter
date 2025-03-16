@@ -65,10 +65,20 @@ let levelSignManager: NewLevelSign | null = null; // Level sign manager
 let startScreen: StartScreen | null = null;
 let gameStarted = false;
 
+// Cooldown tracking
+let basicAttackCooldownEnd = 0;
+let attack2CooldownEnd = 0;
+let shieldCooldownEnd = 0;
+let cooldownIcons: {
+  basic?: Phaser.GameObjects.Container;
+  attack2?: Phaser.GameObjects.Container;
+  shield?: Phaser.GameObjects.Container;
+} = {};
+
 // Preload assets
 function preload(this: Phaser.Scene) {
   // Load character sprite sheet
-  this.load.spritesheet("character", "assets/characters/character_1.png", {
+  this.load.spritesheet("character", "assets/characters/mage.png", {
     frameWidth: 16,
     frameHeight: 22,
   });
@@ -165,7 +175,7 @@ function create(this: Phaser.Scene) {
   }
 
   cursors = this.input.keyboard.createCursorKeys();
-  attackKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+  attackKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
   attackKey2 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C); // C key for attack 2
   attackKey3 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X); // X key for shield
 
@@ -650,6 +660,9 @@ function startGame(scene: Phaser.Scene) {
   playerHealthBar.setDepth(100);
   updatePlayerHealthBar(scene);
 
+  // Create cooldown indicators
+  createCooldownIndicators(scene);
+
   // Spawn enemies
   spawnEnemiesFromGenerator(scene, map, enemies);
 
@@ -658,6 +671,225 @@ function startGame(scene: Phaser.Scene) {
 
   // Debug: Log map data to console
   console.log("Map generation complete");
+}
+
+// Create cooldown indicators for player abilities
+function createCooldownIndicators(scene: Phaser.Scene) {
+  const iconSize = 40;
+  const iconSpacing = 10;
+  const startX = 15;
+  const startY = 55;
+
+  // Basic attack indicator (projectile)
+  cooldownIcons.basic = createCooldownIcon(
+    scene,
+    startX,
+    startY,
+    iconSize,
+    0x44aaff,
+    "Z",
+    "Projectile"
+  );
+
+  // Attack 2 indicator (melee slash)
+  cooldownIcons.attack2 = createCooldownIcon(
+    scene,
+    startX + iconSize + iconSpacing,
+    startY,
+    iconSize,
+    0xff7700,
+    "C",
+    "Slash"
+  );
+
+  // Shield indicator
+  cooldownIcons.shield = createCooldownIcon(
+    scene,
+    startX + (iconSize + iconSpacing) * 2,
+    startY,
+    iconSize,
+    0x44ff44,
+    "X",
+    "Shield"
+  );
+}
+
+// Helper function to create a cooldown icon
+function createCooldownIcon(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  size: number,
+  color: number,
+  keyText: string,
+  abilityName: string
+): Phaser.GameObjects.Container {
+  const container = scene.add.container(x, y);
+  container.setDepth(101);
+  container.setScrollFactor(0);
+
+  // Background
+  const background = scene.add.rectangle(
+    size / 2,
+    size / 2,
+    size,
+    size,
+    0x333333,
+    0.7
+  );
+  background.setStrokeStyle(2, 0xffffff, 0.8);
+
+  // Icon (colored circle)
+  const icon = scene.add.circle(size / 2, size / 2, size / 2 - 4, color, 1);
+
+  // Key binding text
+  const keyLabel = scene.add
+    .text(size / 2, size / 2 - 2, keyText, {
+      fontFamily: "Arial",
+      fontSize: "14px",
+      color: "#ffffff",
+      stroke: "#000000",
+      strokeThickness: 2,
+    })
+    .setOrigin(0.5);
+
+  // Ability name below
+  const nameLabel = scene.add
+    .text(size / 2, size + 2, abilityName, {
+      fontFamily: "Arial",
+      fontSize: "10px",
+      color: "#ffffff",
+    })
+    .setOrigin(0.5, 0);
+
+  // Cooldown overlay (initially invisible)
+  const cooldownOverlay = scene.add.graphics();
+
+  // Add all elements to the container
+  container.add([background, icon, keyLabel, cooldownOverlay, nameLabel]);
+
+  // Store the cooldown overlay and icon for later reference
+  (container as any).cooldownOverlay = cooldownOverlay;
+  (container as any).icon = icon;
+
+  return container;
+}
+
+// Update cooldown indicators
+function updateCooldownIndicators(time: number) {
+  // Update basic attack cooldown
+  updateCooldownIcon(
+    cooldownIcons.basic,
+    time,
+    basicAttackCooldownEnd,
+    500 // Duration matches the cooldown in the code
+  );
+
+  // Update attack 2 cooldown
+  updateCooldownIcon(
+    cooldownIcons.attack2,
+    time,
+    attack2CooldownEnd,
+    800 // Duration matches the cooldown in the code
+  );
+
+  // Update shield cooldown
+  if (shieldActive) {
+    // If shield is active, show it as fully on cooldown
+    updateCooldownIcon(
+      cooldownIcons.shield,
+      0, // Current time not needed for full overlay
+      1, // End time not needed for full overlay
+      1, // Duration not needed for full overlay
+      true // Force full overlay
+    );
+  } else {
+    // Normal cooldown visualization
+    updateCooldownIcon(
+      cooldownIcons.shield,
+      time,
+      shieldCooldownEnd,
+      2000 // Shield cooldown duration
+    );
+  }
+}
+
+// Update a single cooldown icon
+function updateCooldownIcon(
+  container: Phaser.GameObjects.Container | undefined,
+  currentTime: number,
+  endTime: number,
+  duration: number,
+  forceFull: boolean = false
+) {
+  if (!container) return;
+
+  const cooldownOverlay = (container as any)
+    .cooldownOverlay as Phaser.GameObjects.Graphics;
+  const icon = (container as any).icon as Phaser.GameObjects.Shape;
+
+  // Clear previous overlay
+  cooldownOverlay.clear();
+
+  if (forceFull) {
+    // Draw full overlay
+    cooldownOverlay.fillStyle(0x000000, 0.7);
+    cooldownOverlay.fillRect(0, 0, 40, 40);
+    icon.setAlpha(0.5);
+    return;
+  }
+
+  // Calculate remaining cooldown
+  const remaining = endTime - currentTime;
+
+  if (remaining <= 0) {
+    // Ability is ready
+    icon.setAlpha(1);
+
+    // Add a subtle pulsing effect to show it's ready
+    if (!icon.data || !icon.data.get("pulsing")) {
+      const scene = container.scene;
+      scene.tweens.add({
+        targets: icon,
+        alpha: { from: 1, to: 0.7 },
+        duration: 500,
+        yoyo: true,
+        repeat: -1,
+      });
+      if (!icon.data) icon.setDataEnabled();
+      icon.data.set("pulsing", true);
+    }
+    return;
+  }
+
+  // Stop pulsing effect if it was active
+  if (icon.data && icon.data.get("pulsing")) {
+    container.scene.tweens.killTweensOf(icon);
+    icon.setAlpha(0.5);
+    icon.data.set("pulsing", false);
+  }
+
+  // Calculate the fill percentage
+  const fillPercent = remaining / duration;
+
+  // Draw the cooldown overlay (semi-circle pie chart style)
+  cooldownOverlay.fillStyle(0x000000, 0.7);
+
+  const centerX = 20; // Half of icon size
+  const centerY = 20; // Half of icon size
+  const radius = 20; // Size of icon
+
+  // Draw cooldown as a pie chart
+  cooldownOverlay.beginPath();
+  cooldownOverlay.moveTo(centerX, centerY);
+
+  // Calculate end angle based on remaining time
+  const startAngle = -Math.PI / 2; // Start from top
+  const endAngle = startAngle + 2 * Math.PI * fillPercent;
+
+  cooldownOverlay.arc(centerX, centerY, radius, startAngle, endAngle, false);
+  cooldownOverlay.closePath();
+  cooldownOverlay.fillPath();
 }
 
 // Update game state
@@ -678,6 +910,7 @@ function update(this: Phaser.Scene, time: number) {
   if (attackKey.isDown && !attackCooldown) {
     attackCooldown = true;
     fireProjectile(this);
+    basicAttackCooldownEnd = time + 500;
     this.time.delayedCall(500, () => {
       attackCooldown = false;
     });
@@ -687,6 +920,7 @@ function update(this: Phaser.Scene, time: number) {
   if (attackKey2.isDown && !attackCooldown) {
     attackCooldown = true;
     performAttack2(this);
+    attack2CooldownEnd = time + 800;
     this.time.delayedCall(800, () => {
       attackCooldown = false;
     });
@@ -695,7 +929,11 @@ function update(this: Phaser.Scene, time: number) {
   // Handle Shield (X key)
   if (attackKey3.isDown && !shieldActive && !attackCooldown) {
     activateShield(this);
+    shieldCooldownEnd = time + 4000; // 2s active + 2s cooldown
   }
+
+  // Update cooldown indicators with current time
+  updateCooldownIndicators(time);
 
   // Update enemies
   enemies.getChildren().forEach((enemy: Phaser.GameObjects.GameObject) => {
@@ -1064,6 +1302,12 @@ function activateShield(scene: Phaser.Scene) {
       shieldSprite.once("animationcomplete", () => {
         shieldSprite.destroy();
         shieldActive = false;
+
+        // Set cooldown for 2 more seconds after shield ends
+        attackCooldown = true;
+        scene.time.delayedCall(2000, () => {
+          attackCooldown = false;
+        });
       });
     });
   });
