@@ -104,6 +104,12 @@ function preload(this: Phaser.Scene) {
     frameHeight: 32,
   });
 
+  // Load death animation
+  this.load.spritesheet("death_1", "assets/death/death_1.png", {
+    frameWidth: 48,
+    frameHeight: 28,
+  });
+
   // Load player attack 2 animation
   this.load.spritesheet(
     "player_attack_2",
@@ -389,8 +395,8 @@ function create(this: Phaser.Scene) {
       start: 14,
       end: 15,
     }),
-    frameRate: 8,
-    repeat: -1, // Loop indefinitely
+    frameRate: 10,
+    repeat: -1,
   });
 
   // Create shield end animation
@@ -401,6 +407,17 @@ function create(this: Phaser.Scene) {
       end: 21,
     }),
     frameRate: 24,
+    repeat: 0,
+  });
+
+  // Create death animation
+  this.anims.create({
+    key: "death_animation",
+    frames: this.anims.generateFrameNumbers("death_1", {
+      start: 0,
+      end: 7,
+    }),
+    frameRate: 18,
     repeat: 0,
   });
 
@@ -627,8 +644,13 @@ function update(this: Phaser.Scene, time: number) {
   if (nextLevelSign) {
     const playerBounds = player.getBounds();
     const signBounds = nextLevelSign.getBounds();
+    const portalBounds = nextLevelPortal?.getBounds();
 
-    if (Phaser.Geom.Rectangle.Overlaps(playerBounds, signBounds)) {
+    if (
+      Phaser.Geom.Rectangle.Overlaps(playerBounds, signBounds) ||
+      (portalBounds &&
+        Phaser.Geom.Rectangle.Overlaps(playerBounds, portalBounds))
+    ) {
       // Go to next level
 
       // Increment level counter
@@ -726,7 +748,7 @@ function update(this: Phaser.Scene, time: number) {
       targets: nextLevelPortal,
       alpha: 0.6,
       scale: 1.2,
-      duration: 1000,
+      duration: 800,
       yoyo: true,
       repeat: -1,
     });

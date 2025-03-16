@@ -105,8 +105,35 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.healthBar.destroy();
     }
 
-    // Destroy the enemy
-    this.destroy();
+    // Stop any movement
+    this.setVelocity(0, 0);
+
+    // Create the death animation sprite but don't play it immediately
+    const deathAnim = this.scene.add.sprite(this.x, this.y + 10, "death_1");
+    deathAnim.setDepth(this.depth - 1); // Set just below enemy so we can see it
+
+    // Make the enemy invisible immediately
+    this.setVisible(false);
+
+    // Play the death animation after a short delay (200ms)
+    this.scene.time.delayedCall(200, () => {
+      deathAnim.play("death_animation");
+    });
+
+    // When animation completes, destroy the animation sprite
+    deathAnim.on("animationcomplete", () => {
+      deathAnim.destroy();
+    });
+
+    // Destroy the enemy physics body immediately, but keep the game object for the delay
+    if (this.body) {
+      this.body.enable = false;
+    }
+
+    // Destroy the enemy after the animation delay
+    this.scene.time.delayedCall(200, () => {
+      this.destroy();
+    });
   }
 
   update(time: number, player: Phaser.Physics.Arcade.Sprite) {
