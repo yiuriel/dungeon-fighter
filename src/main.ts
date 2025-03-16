@@ -13,6 +13,7 @@ import { Projectile } from "./spawners/Projectile";
 import "./style.css";
 import { findSafePlayerPosition } from "./map/findSafePlayerPosition";
 import { NewLevelSign } from "./helpers/new.level.sign";
+import { StartScreen } from "./helpers/start.screen";
 
 // Game configuration
 const config: Phaser.Types.Core.GameConfig = {
@@ -61,6 +62,8 @@ let currentLevel = 1; // Track current level
 let nextLevelSign: Phaser.GameObjects.Text | null = null; // Next level sign
 let nextLevelPortal: Phaser.GameObjects.Ellipse | null = null; // Portal visual
 let levelSignManager: NewLevelSign | null = null; // Level sign manager
+let startScreen: StartScreen | null = null;
+let gameStarted = false;
 
 // Preload assets
 function preload(this: Phaser.Scene) {
@@ -151,6 +154,11 @@ function preload(this: Phaser.Scene) {
 
 // Create game objects
 function create(this: Phaser.Scene) {
+  // Create start screen
+  startScreen = new StartScreen(this, () => {
+    startGame(this);
+  });
+
   // Initialize cursor keys for movement
   if (!this.input || !this.input.keyboard) {
     return;
@@ -161,40 +169,12 @@ function create(this: Phaser.Scene) {
   attackKey2 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C); // C key for attack 2
   attackKey3 = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X); // X key for shield
 
-  // Generate procedural map
-  map = generateMap();
-
   // Create floor, wall, and decoration groups
   floorLayer = this.add.group();
   walls = this.physics.add.staticGroup();
   decorations = this.add.group();
   enemies = this.physics.add.group({ classType: Enemy });
   projectiles = this.physics.add.group({ classType: Projectile });
-
-  // Render the map
-  renderMapFromGenerator(this, map, floorLayer, walls, decorations);
-
-  // Find a safe position for the player
-  const safePosition = findSafePlayerPosition(map);
-
-  // Create player using the first frame (0)
-  player = this.physics.add.sprite(
-    safePosition.x,
-    safePosition.y,
-    "character",
-    0 // Use the first frame
-  );
-
-  // Scale the player to match the tile size
-  player.setScale(2);
-
-  // Adjust the player's physics body to make the hitbox smaller
-  if (player.body) {
-    // Make the player's collision box 16x16 (smaller than the sprite)
-    player.body.setSize(14, 14);
-    // Center the collision box (offset to center the 16x16 hitbox in the sprite)
-    player.body.setOffset(2, 8);
-  }
 
   // Create animations for the player
   this.anims.create({
@@ -457,6 +437,43 @@ function create(this: Phaser.Scene) {
     repeat: 0,
   });
 
+  // Show the start screen
+  startScreen.startGame();
+}
+
+// Function to start the game (can be called directly to bypass start screen)
+function startGame(scene: Phaser.Scene) {
+  // Mark game as started
+  gameStarted = true;
+
+  // Generate procedural map
+  map = generateMap();
+
+  // Render the map
+  renderMapFromGenerator(scene, map, floorLayer, walls, decorations);
+
+  // Find a safe position for the player
+  const safePosition = findSafePlayerPosition(map);
+
+  // Create player using the first frame (0)
+  player = scene.physics.add.sprite(
+    safePosition.x,
+    safePosition.y,
+    "character",
+    0 // Use the first frame
+  );
+
+  // Scale the player to match the tile size
+  player.setScale(2);
+
+  // Adjust the player's physics body to make the hitbox smaller
+  if (player.body) {
+    // Make the player's collision box 16x16 (smaller than the sprite)
+    player.body.setSize(14, 14);
+    // Center the collision box (offset to center the 16x16 hitbox in the sprite)
+    player.body.setOffset(2, 8);
+  }
+
   // Set player depth to be above floor and walls
   player.setDepth(50);
 
@@ -465,13 +482,13 @@ function create(this: Phaser.Scene) {
   player.setCollideWorldBounds(false);
 
   // Add collision between player and walls
-  this.physics.add.collider(player, walls);
+  scene.physics.add.collider(player, walls);
 
   // Add collision between enemies and walls
-  this.physics.add.collider(enemies, walls);
+  scene.physics.add.collider(enemies, walls);
 
   // Add collision between enemies and player
-  this.physics.add.collider(
+  scene.physics.add.collider(
     player,
     enemies,
     (playerObj, enemyObj) => {
@@ -570,32 +587,32 @@ function create(this: Phaser.Scene) {
       });
     },
     undefined,
-    this
+    scene
   );
 
   // Add collision between enemies
-  this.physics.add.collider(enemies, enemies);
+  scene.physics.add.collider(enemies, enemies);
 
   // Add collision between projectiles and walls
-  this.physics.add.collider(
+  scene.physics.add.collider(
     projectiles,
     walls,
     handleProjectileWallCollision,
     undefined,
-    this
+    scene
   );
 
   // Add collision between projectiles and enemies
-  this.physics.add.overlap(
+  scene.physics.add.overlap(
     projectiles,
     enemies,
     handleProjectileEnemyCollision,
     undefined,
-    this
+    scene
   );
 
   // Create player attack area (invisible)
-  playerAttackArea = this.add.rectangle(
+  playerAttackArea = scene.add.rectangle(
     0,
     0,
     tileSize * 1.25,
@@ -603,7 +620,7 @@ function create(this: Phaser.Scene) {
     0xff0000,
     0
   );
-  this.physics.add.existing(playerAttackArea, false);
+  scene.physics.add.existing(playerAttackArea, false);
   if (playerAttackArea.body) {
     (playerAttackArea.body as Phaser.Physics.Arcade.Body).setAllowGravity(
       false
@@ -611,30 +628,30 @@ function create(this: Phaser.Scene) {
   }
 
   // Add overlap between attack area and enemies
-  this.physics.add.overlap(
+  scene.physics.add.overlap(
     playerAttackArea,
     enemies,
-    handleAttackHit.bind(this),
+    handleAttackHit.bind(scene),
     undefined,
-    this
+    scene
   );
 
   // Set camera to follow player
   // Set the camera bounds to match the actual map size
   const worldWidth = mapWidth * tileSize;
   const worldHeight = mapHeight * tileSize;
-  this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
-  this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
-  this.cameras.main.startFollow(player, true, 0.08, 0.08);
+  scene.physics.world.setBounds(0, 0, worldWidth, worldHeight);
+  scene.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
+  scene.cameras.main.startFollow(player, true, 0.08, 0.08);
 
   // Create player health bar (fixed to camera)
-  playerHealthBar = this.add.graphics();
+  playerHealthBar = scene.add.graphics();
   playerHealthBar.setScrollFactor(0);
   playerHealthBar.setDepth(100);
-  updatePlayerHealthBar(this);
+  updatePlayerHealthBar(scene);
 
   // Spawn enemies
-  spawnEnemiesFromGenerator(this, map, enemies);
+  spawnEnemiesFromGenerator(scene, map, enemies);
 
   // Start with idle animation
   player.anims.play("idle_down");
@@ -645,8 +662,14 @@ function create(this: Phaser.Scene) {
 
 // Update game state
 function update(this: Phaser.Scene, time: number) {
-  // Skip update if player is dead
-  if (!player.active) return;
+  // Skip game logic if game hasn't started yet
+  if (!gameStarted) return;
+
+  // If player doesn't exist, return
+  if (!player) return;
+
+  // Reset velocity
+  player.setVelocity(0);
 
   // Handle player movement
   updatePlayerMovement();
