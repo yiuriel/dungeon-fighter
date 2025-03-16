@@ -6,6 +6,7 @@ import {
   renderMap as renderMapFromGenerator,
   spawnEnemies as spawnEnemiesFromGenerator,
   tileSize,
+  TILES,
 } from "./mapGenerator";
 import { Enemy } from "./spawners/Enemy";
 import { Projectile } from "./spawners/Projectile";
@@ -957,15 +958,26 @@ function performAttack2(scene: Phaser.Scene) {
 
   // Check if the attack would hit a wall
   let willHitWall = false;
-  scene.physics.world.collide(tempBody, walls, () => {
+  let destructibleWall: any = null;
+
+  scene.physics.world.collide(tempBody, walls, (_tempBody, wallObj) => {
     willHitWall = true;
+
+    // Try to access the wall's properties safely
+    try {
+      if ((wallObj as any).isDestructible) {
+        destructibleWall = wallObj;
+      }
+    } catch (e) {
+      // Ignore errors if properties don't exist
+    }
   });
 
   // Destroy the temporary body
   tempBody.destroy();
 
-  // If the attack would hit a wall, don't perform it
-  if (willHitWall) {
+  // If the attack would hit a wall but it's destructible, allow the attack
+  if (willHitWall && !destructibleWall) {
     // Visual feedback that attack can't be performed
     player.setTint(0xaaaaaa);
     scene.time.delayedCall(100, () => {
@@ -990,51 +1002,50 @@ function performAttack2(scene: Phaser.Scene) {
   attackArea.setSize(24, 24); // Set hitbox to 16x16
   attackArea.setOffset(4, 4); // Center the hitbox (assuming 32x32 sprite)
 
+  // If we found a destructible wall, destroy it
+  if (destructibleWall) {
+    // Create a destruction effect at the wall's position
+    const deathAnim = scene.add.sprite(
+      destructibleWall.x,
+      destructibleWall.y,
+      "death_1"
+    );
+    deathAnim.setScale(1.5);
+    deathAnim.setDepth(3);
+    deathAnim.play("death_animation").once("animationcomplete", () => {
+      deathAnim.destroy();
+    });
+
+    // Add a floor tile where the wall was
+    const floorTileTypes = Object.values(TILES.FLOOR);
+    const tileIndex =
+      floorTileTypes[Math.floor(Math.random() * floorTileTypes.length)];
+    const floorTile = scene.add.sprite(
+      destructibleWall.x,
+      destructibleWall.y,
+      "dungeon_floor",
+      tileIndex as number
+    );
+    floorTile.setScale(2);
+    floorTile.setDepth(0); // Below walls and player
+    floorLayer.add(floorTile);
+
+    // Remove the wall after a short delay
+    const wallToDestroy = destructibleWall;
+    scene.time.delayedCall(200, () => {
+      if (wallToDestroy && typeof wallToDestroy.destroy === "function") {
+        wallToDestroy.destroy();
+      }
+    });
+  }
+
   // Check for enemies in range and damage them
   scene.physics.add.overlap(attackArea, enemies, (_attackObj, enemyObj) => {
     const enemy = enemyObj as Enemy;
 
     // Apply damage to enemy
     const damage = 30;
-    const prevHealth = enemy.health;
-    enemy.takeDamage(damage);
-
-    // Only apply knockback if damage was taken
-    if (prevHealth > enemy.health) {
-      // Calculate knockback direction based on attack direction
-      const knockbackForce = 100;
-      let knockbackX = 0;
-      let knockbackY = 0;
-
-      switch (playerFacing) {
-        case "left":
-          knockbackX = -knockbackForce;
-          break;
-        case "right":
-          knockbackX = knockbackForce;
-          break;
-        case "up":
-          knockbackY = -knockbackForce;
-          break;
-        case "down":
-          knockbackY = knockbackForce;
-          break;
-      }
-
-      // Apply knockback
-      if (enemy && enemy.active) {
-        enemy.setVelocity(knockbackX, knockbackY);
-      }
-
-      // Briefly disable enemy movement decisions during knockback
-      enemy.lastMoveTime = scene.time.now + 300;
-
-      // Visual feedback
-      enemy.setTint(0xff0000);
-      scene.time.delayedCall(200, () => {
-        enemy.clearTint();
-      });
-    }
+    enemy.takeDamage(damage, player);
   });
 
   // Clean up the attack area after animation completes
@@ -1121,42 +1132,54 @@ function handleAttackHit(this: Phaser.Scene, _: any, object2: any) {
   if (!enemy) return;
 
   // Apply damage and check if it was actually taken (not in cooldown)
-  const prevHealth = enemy.health;
-  enemy.takeDamage(20); // Reduced damage from 25 to 20
-
-  // Only apply knockback if damage was taken
-  if (prevHealth > enemy.health) {
-    // Calculate knockback direction based on player position
-    const knockbackForce = 150;
-    const angle = Phaser.Math.Angle.Between(
-      player.x,
-      player.y,
-      enemy.x,
-      enemy.y
-    );
-
-    if (enemy && enemy.active) {
-      enemy.setVelocity(
-        Math.cos(angle) * knockbackForce,
-        Math.sin(angle) * knockbackForce
-      );
-    }
-
-    // Briefly disable enemy movement decisions during knockback
-    enemy.lastMoveTime = this.time.now + 500;
-
-    // Visual feedback
-    enemy.setTint(0xff0000);
-    this.time.delayedCall(200, () => {
-      if (enemy.active) {
-        enemy.clearTint();
-      }
-    });
-  }
+  enemy.takeDamage(20, player); // Reduced damage from 25 to 20
 }
 
 // Handle projectile hitting a wall
-function handleProjectileWallCollision(projectile: any, _wall: any) {
+function handleProjectileWallCollision(projectile: any, wallObj: any) {
+  try {
+    // Try to access the wall object safely
+    const wall = wallObj.gameObject || wallObj;
+
+    // Check if the wall is destructible
+    if (wall && wall.isDestructible) {
+      // Create a destruction effect at the wall's position
+      const scene = projectile.scene;
+
+      // Play death animation at wall position
+      const deathAnim = scene.add.sprite(wall.x, wall.y, "death_1");
+      deathAnim.setScale(1.5);
+      deathAnim.setDepth(3);
+      deathAnim.play("death_animation").once("animationcomplete", () => {
+        deathAnim.destroy();
+      });
+
+      // Add a floor tile where the wall was
+      const floorTileTypes = Object.values(TILES.FLOOR);
+      const tileIndex =
+        floorTileTypes[Math.floor(Math.random() * floorTileTypes.length)];
+      const floorTile = scene.add.sprite(
+        wall.x,
+        wall.y,
+        "dungeon_floor",
+        tileIndex as number
+      );
+      floorTile.setScale(2);
+      floorTile.setDepth(0); // Below walls and player
+      floorLayer.add(floorTile);
+
+      // Remove the wall after a short delay
+      scene.time.delayedCall(200, () => {
+        if (wall && wall.destroy) {
+          wall.destroy();
+        }
+      });
+    }
+  } catch (e) {
+    // Ignore errors if properties don't exist
+  }
+
+  // Handle the projectile hit
   (projectile as Projectile).hitTarget();
 }
 
@@ -1169,46 +1192,7 @@ function handleProjectileEnemyCollision(projectile: any, enemyObj: any) {
     const enemy = enemyObj as Enemy;
 
     // Apply damage to enemy
-    const prevHealth = enemy.health;
-    enemy.takeDamage(20);
-
-    // Only apply knockback if damage was taken
-    if (prevHealth > enemy.health) {
-      // Calculate knockback direction based on projectile direction
-      const knockbackForce = 100;
-      let knockbackX = 0;
-      let knockbackY = 0;
-
-      switch (proj.direction) {
-        case "left":
-          knockbackX = -knockbackForce;
-          break;
-        case "right":
-          knockbackX = knockbackForce;
-          break;
-        case "up":
-          knockbackY = -knockbackForce;
-          break;
-        case "down":
-          knockbackY = knockbackForce;
-          break;
-      }
-
-      if (enemy && enemy.active) {
-        enemy.setVelocity(knockbackX, knockbackY);
-      }
-
-      // Briefly disable enemy movement decisions during knockback
-      enemy.lastMoveTime = proj.scene.time.now + 300;
-
-      // Visual feedback
-      enemy.setTint(0xff0000);
-      proj.scene.time.delayedCall(200, () => {
-        if (enemy.active) {
-          enemy.clearTint();
-        }
-      });
-    }
+    enemy.takeDamage(20, player);
 
     // Make projectile disappear
     proj.hitTarget();

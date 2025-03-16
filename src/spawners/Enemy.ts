@@ -34,6 +34,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // Create health bar
     this.healthBar = scene.add.graphics();
+    this.healthBar.setDepth(20);
     this.updateHealthBar();
 
     // Add to scene and physics
@@ -41,7 +42,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     // Set depth
-    this.setDepth(8);
+    this.setDepth(20);
   }
 
   // Abstract methods to be implemented by subclasses
@@ -78,14 +79,45 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.healthBar.fillRect(this.x - 15, this.y - 20, healthWidth, 5);
   }
 
-  takeDamage(amount: number) {
+  takeDamage(amount: number, player: Phaser.Physics.Arcade.Sprite) {
     // Check if enemy is in damage cooldown
     if (this.damageCooldown) return;
 
     // Apply damage
+    const prevHealth = this.health;
     this.health -= amount;
     this.health = Math.max(0, this.health);
     this.updateHealthBar();
+
+    // Only apply knockback if damage was taken
+    if (this.health < prevHealth) {
+      // Calculate knockback direction based on player position
+      const knockbackForce = 80;
+      const angle = Phaser.Math.Angle.Between(
+        player.x,
+        player.y,
+        this.x,
+        this.y
+      );
+
+      if (this.active) {
+        this.setVelocity(
+          Math.cos(angle) * knockbackForce,
+          Math.sin(angle) * knockbackForce
+        );
+      }
+
+      // Briefly disable enemy movement decisions during knockback
+      this.lastMoveTime = this.scene.time.now + 500;
+
+      // Visual feedback
+      this.setTint(0xff0000);
+      this.scene.time.delayedCall(this.damageCooldownDuration, () => {
+        if (this.active) {
+          this.clearTint();
+        }
+      });
+    }
 
     // Set damage cooldown
     this.damageCooldown = true;
@@ -202,7 +234,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     );
 
     // If player is too far, don't chase
-    if (distToPlayer > 300) {
+    if (distToPlayer > 400) {
       this.targetPosition = null;
       return;
     }
@@ -280,8 +312,8 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Try each direction until we find one that doesn't hit a wall
     for (const dir of potentialDirections) {
       // Create a test position 50 pixels in this direction
-      const testX = this.x + dir.x * 50;
-      const testY = this.y + dir.y * 50;
+      const testX = this.x + dir.x * 100;
+      const testY = this.y + dir.y * 100;
 
       // Check if moving in this direction would hit a wall
       const wouldHitWall = this.wouldPositionHitWall(testX, testY);

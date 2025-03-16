@@ -69,7 +69,7 @@ export function generateMap(): number[][] {
   }
 
   // Apply cellular automata to smooth the map
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     map = applyCellularAutomata(map);
   }
 
@@ -96,7 +96,11 @@ export function generateMap(): number[][] {
 }
 
 // Ensure all floor tiles are connected (no isolated areas)
-function ensureConnectivity(map: number[][], startX: number, startY: number): void {
+function ensureConnectivity(
+  map: number[][],
+  startX: number,
+  startY: number
+): void {
   // Create a copy of the map to mark visited tiles
   const visited: boolean[][] = [];
   for (let y = 0; y < mapHeight; y++) {
@@ -121,7 +125,12 @@ function ensureConnectivity(map: number[][], startX: number, startY: number): vo
 }
 
 // Flood fill algorithm to mark all accessible floor tiles
-function floodFill(map: number[][], visited: boolean[][], x: number, y: number): void {
+function floodFill(
+  map: number[][],
+  visited: boolean[][],
+  x: number,
+  y: number
+): void {
   // Check if position is valid
   if (
     x < 0 ||
@@ -145,7 +154,12 @@ function floodFill(map: number[][], visited: boolean[][], x: number, y: number):
 }
 
 // Connect an isolated area to the main area
-function connectToMainArea(map: number[][], visited: boolean[][], x: number, y: number): void {
+function connectToMainArea(
+  map: number[][],
+  visited: boolean[][],
+  x: number,
+  y: number
+): void {
   // Find the closest visited floor tile
   let closestX = -1;
   let closestY = -1;
@@ -167,7 +181,7 @@ function connectToMainArea(map: number[][], visited: boolean[][], x: number, y: 
   // If we found a visited floor tile, create a path to it
   if (closestX !== -1 && closestY !== -1) {
     createPath(map, x, y, closestX, closestY);
-    
+
     // Mark the newly connected area as visited
     const newVisited: boolean[][] = [];
     for (let ny = 0; ny < mapHeight; ny++) {
@@ -177,7 +191,7 @@ function connectToMainArea(map: number[][], visited: boolean[][], x: number, y: 
       }
     }
     floodFill(map, newVisited, x, y);
-    
+
     // Update the visited array
     for (let ny = 0; ny < mapHeight; ny++) {
       for (let nx = 0; nx < mapWidth; nx++) {
@@ -188,7 +202,13 @@ function connectToMainArea(map: number[][], visited: boolean[][], x: number, y: 
 }
 
 // Create a path between two points
-function createPath(map: number[][], x1: number, y1: number, x2: number, y2: number): void {
+function createPath(
+  map: number[][],
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): void {
   // Simple line drawing algorithm
   const dx = Math.abs(x2 - x1);
   const dy = Math.abs(y2 - y1);
@@ -352,25 +372,6 @@ export function renderMap(
         );
         floorTile.setScale(2); // Scale up the tile to match tileSize
         floorLayer.add(floorTile);
-
-        // Randomly add decorations to some floor tiles
-        if (Math.random() < 0.05) {
-          // Select a random decoration
-          const decorationTypes = Object.values(TILES.DECORATION);
-          const decorationIndex =
-            decorationTypes[Math.floor(Math.random() * decorationTypes.length)];
-
-          // Create the decoration sprite
-          const decoration = scene.add.sprite(
-            tileX + tileSize / 2,
-            tileY + tileSize / 2,
-            "tileset", // Keep using the original tileset for decorations
-            decorationIndex
-          );
-          decoration.setScale(2);
-          decoration.setDepth(1); // Above floor, below walls
-          decorations.add(decoration);
-        }
       }
     }
   }
@@ -395,6 +396,16 @@ export function renderMap(
         );
         wall.setScale(2);
         wall.setDepth(2); // Set walls to be above floor and decorations
+
+        // Mark some walls as destructible based on probability
+        // Don't make edge walls destructible to prevent escaping the map
+        if (x > 1 && y > 1 && x < mapWidth - 2 && y < mapHeight - 2) {
+          // Use a custom property that's easier to check
+          (wall as any).isDestructible = true;
+
+          // Visual indicator that the wall is destructible (slightly different tint)
+          wall.setTint(0xcccccc);
+        }
 
         // Update the physics body size to match the scaled sprite
         if (wall.body) {
