@@ -1,4 +1,4 @@
-import { Enemy } from "./spawners/Enemy";
+import { createEnemy } from "./spawners/Enemy";
 
 // Map generation constants and variables
 export const tileSize = 32; // Display size of tiles
@@ -282,22 +282,21 @@ export function spawnEnemies(
     if (validPosition) {
       // Randomly choose between crab and octopus
       const enemyType = Math.random() < 0.5 ? "enemy_crab" : "enemy_octopus";
-
-      const enemy = enemies.get(
+      
+      // Create the appropriate enemy type using the factory function
+      const enemy = createEnemy(
+        enemies.scene, 
         x * tileSize + tileSize / 2,
-        y * tileSize + tileSize / 2
-      ) as Enemy;
-
-      if (enemy) {
-        // Set the texture based on the enemy type
-        enemy.setTexture(enemyType);
-        // Update the enemyType property
-        enemy.enemyType = enemyType === "enemy_octopus" ? "octopus" : "crab";
-
-        enemy.setActive(true);
-        enemy.setVisible(true);
-        // The enemy is already initialized in the Enemy class
-      }
+        y * tileSize + tileSize / 2,
+        enemyType
+      );
+      
+      // Add the enemy to the group
+      enemies.add(enemy);
+      
+      // Make sure the enemy is active and visible
+      enemy.setActive(true);
+      enemy.setVisible(true);
     }
   }
 }

@@ -1,10 +1,15 @@
-export class Enemy extends Phaser.Physics.Arcade.Sprite {
+// Base Enemy class that implements common functionality
+export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   health: number;
+  maxHealth: number;
   lastMoveTime: number;
   damageCooldown: boolean;
+  damageCooldownDuration: number;
+  moveSpeed: number;
+  attackDamage: number;
   healthBar: Phaser.GameObjects.Graphics;
-  private targetPosition: { x: number; y: number } | null = null;
-  private pathfindingCooldown: number = 0;
+  protected targetPosition: { x: number; y: number } | null = null;
+  protected pathfindingCooldown: number = 0;
   enemyType: string;
 
   constructor(
@@ -16,10 +21,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   ) {
     super(scene, x, y, texture, frame);
     this.scene = scene;
-    this.health = 100;
+
+    // Set default values
+    this.maxHealth = this.getMaxHealth();
+    this.health = this.maxHealth;
     this.lastMoveTime = 0;
     this.damageCooldown = false;
-    this.enemyType = texture === "enemy_octopus" ? "octopus" : "crab";
+    this.damageCooldownDuration = this.getDamageCooldownDuration();
+    this.moveSpeed = this.getMoveSpeed();
+    this.attackDamage = this.getAttackDamage();
+    this.enemyType = this.getEnemyType();
 
     // Create health bar
     this.healthBar = scene.add.graphics();
@@ -33,6 +44,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setDepth(8);
   }
 
+  // Abstract methods to be implemented by subclasses
+  protected abstract getEnemyType(): string;
+  protected abstract getAnimationPrefix(): string;
+
+  // Methods for enemy characteristics that can be overridden by subclasses
+  protected getMaxHealth(): number {
+    return 100; // Default max health
+  }
+
+  protected getDamageCooldownDuration(): number {
+    return 1000; // Default cooldown in ms
+  }
+
+  protected getMoveSpeed(): number {
+    return 50; // Default move speed
+  }
+
+  protected getAttackDamage(): number {
+    return 10; // Default attack damage
+  }
+
   updateHealthBar() {
     this.healthBar.clear();
 
@@ -42,7 +74,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // Health amount (green)
     this.healthBar.fillStyle(0x00ff00);
-    const healthWidth = Math.max(0, (this.health / 100) * 30);
+    const healthWidth = Math.max(0, (this.health / this.maxHealth) * 30);
     this.healthBar.fillRect(this.x - 15, this.y - 20, healthWidth, 5);
   }
 
@@ -57,7 +89,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // Set damage cooldown
     this.damageCooldown = true;
-    this.scene.time.delayedCall(1000, () => {
+    this.scene.time.delayedCall(this.damageCooldownDuration, () => {
       this.damageCooldown = false;
     });
 
@@ -89,7 +121,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
       // Choose random direction
       const direction = Math.floor(Math.random() * 4);
-      const speed = 50;
+      const speed = this.moveSpeed;
 
       // Reset velocity
       this.setVelocity(0);
@@ -97,19 +129,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       switch (direction) {
         case 0: // Left
           this.setVelocityX(-speed);
-          this.anims.play(`${this.enemyType}_left`, true);
+          this.anims.play(`${this.getAnimationPrefix()}_left`, true);
           break;
         case 1: // Right
           this.setVelocityX(speed);
-          this.anims.play(`${this.enemyType}_right`, true);
+          this.anims.play(`${this.getAnimationPrefix()}_right`, true);
           break;
         case 2: // Up
           this.setVelocityY(-speed);
-          this.anims.play(`${this.enemyType}_up`, true);
+          this.anims.play(`${this.getAnimationPrefix()}_up`, true);
           break;
         case 3: // Down
           this.setVelocityY(speed);
-          this.anims.play(`${this.enemyType}_down`, true);
+          this.anims.play(`${this.getAnimationPrefix()}_down`, true);
           break;
       }
     }
@@ -154,7 +186,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (hasLineOfSight) {
       // Direct path to player
       this.targetPosition = { x: player.x, y: player.y };
-      this.scene.physics.moveToObject(this, player, 60);
+      this.scene.physics.moveToObject(this, player, this.moveSpeed + 10); // Slightly faster when chasing directly
     } else {
       // No direct path, try to find a way around obstacles
       this.findPathAroundObstacles(player);
@@ -230,7 +262,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       if (!wouldHitWall) {
         // Found a good direction, move that way
         this.targetPosition = { x: testX, y: testY };
-        this.scene.physics.moveTo(this, testX, testY, 60);
+        this.scene.physics.moveTo(this, testX, testY, this.moveSpeed);
         return;
       }
     }
@@ -260,7 +292,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         wallBody.height
       );
 
-      // Check if circle intersects with wall
+      // Check if circle intersects with rectangle
       if (Phaser.Geom.Intersects.CircleToRectangle(testCircle, wallRect)) {
         wouldHit = true;
         return false; // Stop iteration when we find an intersection
@@ -287,17 +319,95 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (absVelX > absVelY) {
       // Moving horizontally
       if (this.body.velocity.x > 0) {
-        this.anims.play(`${this.enemyType}_right`, true);
+        this.anims.play(`${this.getAnimationPrefix()}_right`, true);
       } else {
-        this.anims.play(`${this.enemyType}_left`, true);
+        this.anims.play(`${this.getAnimationPrefix()}_left`, true);
       }
     } else {
       // Moving vertically
       if (this.body.velocity.y > 0) {
-        this.anims.play(`${this.enemyType}_down`, true);
+        this.anims.play(`${this.getAnimationPrefix()}_down`, true);
       } else {
-        this.anims.play(`${this.enemyType}_up`, true);
+        this.anims.play(`${this.getAnimationPrefix()}_up`, true);
       }
     }
+  }
+}
+
+// Crab enemy implementation
+export class EnemyCrab extends Enemy {
+  constructor(scene: Phaser.Scene, x: number, y: number, frame?: number) {
+    super(scene, x, y, "enemy_crab", frame);
+  }
+
+  protected getEnemyType(): string {
+    return "crab";
+  }
+
+  protected getAnimationPrefix(): string {
+    return "crab";
+  }
+
+  // Override base characteristics for crab
+  protected getMaxHealth(): number {
+    return 120; // Crabs have more health
+  }
+
+  protected getDamageCooldownDuration(): number {
+    return 1200; // Longer cooldown between attacks
+  }
+
+  protected getMoveSpeed(): number {
+    return 45; // Slower movement
+  }
+
+  protected getAttackDamage(): number {
+    return 15; // Higher damage
+  }
+}
+
+// Octopus enemy implementation
+export class EnemyOctopus extends Enemy {
+  constructor(scene: Phaser.Scene, x: number, y: number, frame?: number) {
+    super(scene, x, y, "enemy_octopus", frame);
+  }
+
+  protected getEnemyType(): string {
+    return "octopus";
+  }
+
+  protected getAnimationPrefix(): string {
+    return "octopus";
+  }
+
+  // Override base characteristics for octopus
+  protected getMaxHealth(): number {
+    return 80; // Less health than crab
+  }
+
+  protected getDamageCooldownDuration(): number {
+    return 800; // Faster attack rate
+  }
+
+  protected getMoveSpeed(): number {
+    return 60; // Faster movement
+  }
+
+  protected getAttackDamage(): number {
+    return 8; // Less damage per hit
+  }
+}
+
+// Factory function to create the appropriate enemy type
+export function createEnemy(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  type: string
+): Enemy {
+  if (type === "enemy_octopus") {
+    return new EnemyOctopus(scene, x, y);
+  } else {
+    return new EnemyCrab(scene, x, y);
   }
 }

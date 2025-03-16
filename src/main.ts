@@ -1,15 +1,15 @@
-import "./style.css";
 import Phaser from "phaser";
 import {
   generateMap,
+  mapHeight,
+  mapWidth,
   renderMap as renderMapFromGenerator,
   spawnEnemies as spawnEnemiesFromGenerator,
   tileSize,
-  mapWidth,
-  mapHeight,
 } from "./mapGenerator";
-import { Projectile } from "./spawners/Projectile";
 import { Enemy } from "./spawners/Enemy";
+import { Projectile } from "./spawners/Projectile";
+import "./style.css";
 
 // Game configuration
 const config: Phaser.Types.Core.GameConfig = {
@@ -22,7 +22,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: "arcade",
     arcade: {
       gravity: { x: 0, y: 0 },
-      debug: false, // Enable debug rendering
+      debug: true, // Enable debug rendering
     },
   },
   scene: {
@@ -79,10 +79,14 @@ function preload(this: Phaser.Scene) {
   });
 
   // Load enemy octopus sprite sheet
-  this.load.spritesheet("enemy_octopus", "assets/characters/enemy_octopus.png", {
-    frameWidth: 32,
-    frameHeight: 24,
-  });
+  this.load.spritesheet(
+    "enemy_octopus",
+    "assets/characters/enemy_octopus.png",
+    {
+      frameWidth: 32,
+      frameHeight: 24,
+    }
+  );
 
   // Load attack projectile sprite sheet
   this.load.spritesheet(
@@ -153,13 +157,13 @@ function create(this: Phaser.Scene) {
   // Scale the player to match the tile size
   player.setScale(2);
 
-  // Adjust the player's physics body to match the scaled sprite
-  // if (player.body) {
-  //   // Make the player's collision box smaller than the sprite
-  //   // player.body.setSize(tileSize * 0.5, tileSize * 0.5);
-  //   // Center the collision box
-  //   // player.body.setOffset(tileSize, tileSize);
-  // }
+  // Adjust the player's physics body to make the hitbox smaller
+  if (player.body) {
+    // Make the player's collision box 16x16 (smaller than the sprite)
+    player.body.setSize(14, 14);
+    // Center the collision box (offset to center the 16x16 hitbox in the sprite)
+    player.body.setOffset(1, 7);
+  }
 
   // Create animations for the player
   this.anims.create({
@@ -266,28 +270,40 @@ function create(this: Phaser.Scene) {
   // Create animations for the octopus enemy
   this.anims.create({
     key: "octopus_idle",
-    frames: this.anims.generateFrameNumbers("enemy_octopus", { start: 0, end: 0 }),
+    frames: this.anims.generateFrameNumbers("enemy_octopus", {
+      start: 0,
+      end: 0,
+    }),
     frameRate: 10,
     repeat: -1,
   });
 
   this.anims.create({
     key: "octopus_down",
-    frames: this.anims.generateFrameNumbers("enemy_octopus", { start: 0, end: 2 }),
+    frames: this.anims.generateFrameNumbers("enemy_octopus", {
+      start: 0,
+      end: 2,
+    }),
     frameRate: 8,
     repeat: -1,
   });
 
   this.anims.create({
     key: "octopus_left",
-    frames: this.anims.generateFrameNumbers("enemy_octopus", { start: 3, end: 5 }),
+    frames: this.anims.generateFrameNumbers("enemy_octopus", {
+      start: 3,
+      end: 5,
+    }),
     frameRate: 8,
     repeat: -1,
   });
 
   this.anims.create({
     key: "octopus_right",
-    frames: this.anims.generateFrameNumbers("enemy_octopus", { start: 6, end: 8 }),
+    frames: this.anims.generateFrameNumbers("enemy_octopus", {
+      start: 6,
+      end: 8,
+    }),
     frameRate: 8,
     repeat: -1,
   });
@@ -909,7 +925,8 @@ function performAttack2(scene: Phaser.Scene) {
     "player_attack_2"
   );
   attackArea.setVisible(false); // Hide the actual physics sprite
-  attackArea.setSize(64, 64); // Larger collision area
+  attackArea.setSize(24, 24); // Set hitbox to 16x16
+  attackArea.setOffset(4, 4); // Center the hitbox (assuming 32x32 sprite)
 
   // Check for enemies in range and damage them
   scene.physics.add.overlap(attackArea, enemies, (_attackObj, enemyObj) => {
