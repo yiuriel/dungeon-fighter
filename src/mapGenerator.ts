@@ -1,3 +1,5 @@
+import { Enemy } from "./spawners/Enemy";
+
 // Map generation constants and variables
 export const tileSize = 32; // Display size of tiles
 export let mapWidth = 40;
@@ -278,11 +280,20 @@ export function spawnEnemies(
 
     // If we found a valid position, spawn an enemy
     if (validPosition) {
+      // Randomly choose between crab and octopus
+      const enemyType = Math.random() < 0.5 ? "enemy_crab" : "enemy_octopus";
+
       const enemy = enemies.get(
         x * tileSize + tileSize / 2,
         y * tileSize + tileSize / 2
-      );
+      ) as Enemy;
+
       if (enemy) {
+        // Set the texture based on the enemy type
+        enemy.setTexture(enemyType);
+        // Update the enemyType property
+        enemy.enemyType = enemyType === "enemy_octopus" ? "octopus" : "crab";
+
         enemy.setActive(true);
         enemy.setVisible(true);
         // The enemy is already initialized in the Enemy class

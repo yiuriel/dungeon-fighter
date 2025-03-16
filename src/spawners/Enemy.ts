@@ -5,6 +5,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   healthBar: Phaser.GameObjects.Graphics;
   private targetPosition: { x: number; y: number } | null = null;
   private pathfindingCooldown: number = 0;
+  enemyType: string;
 
   constructor(
     scene: Phaser.Scene,
@@ -18,6 +19,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.health = 100;
     this.lastMoveTime = 0;
     this.damageCooldown = false;
+    this.enemyType = texture === "enemy_octopus" ? "octopus" : "crab";
 
     // Create health bar
     this.healthBar = scene.add.graphics();
@@ -95,19 +97,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       switch (direction) {
         case 0: // Left
           this.setVelocityX(-speed);
-          this.anims.play("crab_left", true);
+          this.anims.play(`${this.enemyType}_left`, true);
           break;
         case 1: // Right
           this.setVelocityX(speed);
-          this.anims.play("crab_right", true);
+          this.anims.play(`${this.enemyType}_right`, true);
           break;
         case 2: // Up
           this.setVelocityY(-speed);
-          this.anims.play("crab_up", true);
+          this.anims.play(`${this.enemyType}_up`, true);
           break;
         case 3: // Down
           this.setVelocityY(speed);
-          this.anims.play("crab_down", true);
+          this.anims.play(`${this.enemyType}_down`, true);
           break;
       }
     }
@@ -285,16 +287,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (absVelX > absVelY) {
       // Moving horizontally
       if (this.body.velocity.x > 0) {
-        this.anims.play("crab_right", true);
+        this.anims.play(`${this.enemyType}_right`, true);
       } else {
-        this.anims.play("crab_left", true);
+        this.anims.play(`${this.enemyType}_left`, true);
       }
     } else {
       // Moving vertically
       if (this.body.velocity.y > 0) {
-        this.anims.play("crab_down", true);
+        this.anims.play(`${this.enemyType}_down`, true);
       } else {
-        this.anims.play("crab_up", true);
+        this.anims.play(`${this.enemyType}_up`, true);
       }
     }
   }
