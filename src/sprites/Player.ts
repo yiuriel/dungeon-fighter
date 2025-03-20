@@ -289,21 +289,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     attackAnim.setAngle(angle);
     attackAnim.anims.play("attack2");
 
-    // Create a physics body for the attack to detect collisions
-    const attackArea = this.scene.physics.add.sprite(
-      attackX,
-      attackY,
-      "player_attack_2"
-    );
-    attackArea.setVisible(false); // Hide the actual physics sprite
-    attackArea.setSize(24, 24); // Set hitbox to 16x16
-    attackArea.setOffset(4, 4); // Center the hitbox (assuming 32x32 sprite)
     this.scene.events.emit("special_attack_fired", attackAnim);
 
     // // Clean up the attack area after animation completes
     attackAnim.once("animationcomplete", () => {
       attackAnim.destroy();
-      attackArea.destroy();
     });
   }
 
