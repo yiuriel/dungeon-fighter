@@ -408,7 +408,7 @@ export function renderMap(
         // Update the physics body size to match the scaled sprite
         if (wall.body) {
           wall.body.setSize(tileSize, tileSize);
-          wall.body.setOffset(-6, -6);
+          wall.body.setOffset(-7, -7);
         }
       }
     }
