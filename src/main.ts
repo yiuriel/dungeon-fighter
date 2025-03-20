@@ -15,20 +15,17 @@ import { findSafePlayerPosition } from "./map/findSafePlayerPosition";
 import { NewLevelSign } from "./helpers/new.level.sign";
 import { StartScreen } from "./helpers/start.screen";
 import { Player } from "./sprites/Player";
+import { Attack } from "./sprites/Attack/types";
 
 class GameScene extends Phaser.Scene {
   // Game variables
   player!: Player;
-  cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   map: number[][] = [];
   floorLayer!: Phaser.GameObjects.Group;
   walls!: Phaser.Physics.Arcade.StaticGroup;
-  decorations!: Phaser.GameObjects.Group;
   enemies!: Phaser.Physics.Arcade.Group;
-  // playerAttackArea!: Phaser.GameObjects.Rectangle;
   basicAttacksGroup!: Phaser.Physics.Arcade.Group; // Group for projectiles
   specialAttacksGroup!: Phaser.Physics.Arcade.Group; // Group for projectiles
-  playerFacing = "down"; // Track player facing direction
   currentLevel = 1; // Track current level
   nextLevelSign: Phaser.GameObjects.Text | null = null; // Next level sign
   nextLevelPortal: Phaser.GameObjects.Ellipse | null = null; // Portal visual
@@ -37,9 +34,6 @@ class GameScene extends Phaser.Scene {
   gameStarted = false;
 
   // Cooldown tracking
-  basicAttackCooldownEnd = 0;
-  attack2CooldownEnd = 0;
-  shieldCooldownEnd = 0;
   cooldownIcons: {
     basic?: Phaser.GameObjects.Container;
     attack2?: Phaser.GameObjects.Container;
@@ -158,7 +152,6 @@ class GameScene extends Phaser.Scene {
     // Create floor, wall, and decoration groups
     this.floorLayer = this.add.group();
     this.walls = this.physics.add.staticGroup();
-    this.decorations = this.add.group();
     this.enemies = this.physics.add.group({ classType: Enemy });
     this.basicAttacksGroup = this.physics.add.group({ classType: Projectile });
     this.specialAttacksGroup = this.physics.add.group();
@@ -491,13 +484,7 @@ class GameScene extends Phaser.Scene {
     this.map = generateMap();
 
     // Render the map
-    renderMapFromGenerator(
-      this,
-      this.map,
-      this.floorLayer,
-      this.walls,
-      this.decorations
-    );
+    renderMapFromGenerator(this, this.map, this.floorLayer, this.walls);
 
     // Find a safe position for the player
     const safePosition = findSafePlayerPosition(this.map);
@@ -551,6 +538,15 @@ class GameScene extends Phaser.Scene {
       this.basicAttacksGroup,
       this.enemies,
       this.handleProjectileEnemyCollision,
+      undefined,
+      this
+    );
+
+    // Add collision between special attacks and enemies
+    this.physics.add.overlap(
+      this.specialAttacksGroup,
+      this.enemies,
+      this.handleEnemySpecialAttackHit,
       undefined,
       this
     );
@@ -679,7 +675,7 @@ class GameScene extends Phaser.Scene {
     this.updateCooldownIcon(
       this.cooldownIcons.basic,
       time,
-      this.basicAttackCooldownEnd,
+      this.player.getBasicAttackCooldown(),
       500 // Duration matches the cooldown in the code
     );
 
@@ -687,7 +683,7 @@ class GameScene extends Phaser.Scene {
     this.updateCooldownIcon(
       this.cooldownIcons.attack2,
       time,
-      this.attack2CooldownEnd,
+      this.player.getSpecialAttackCooldown(),
       800 // Duration matches the cooldown in the code
     );
 
@@ -706,7 +702,7 @@ class GameScene extends Phaser.Scene {
       this.updateCooldownIcon(
         this.cooldownIcons.shield,
         time,
-        this.shieldCooldownEnd,
+        this.player.getShieldCooldown(),
         2000 // Shield cooldown duration
       );
     }
@@ -886,16 +882,9 @@ class GameScene extends Phaser.Scene {
     // Clear and recreate walls
     this.walls.clear(true, true);
     this.floorLayer.clear(true, true);
-    this.decorations.clear(true, true);
 
     // Render the new map
-    renderMapFromGenerator(
-      this,
-      this.map,
-      this.floorLayer,
-      this.walls,
-      this.decorations
-    );
+    renderMapFromGenerator(this, this.map, this.floorLayer, this.walls);
 
     // Find a safe position for the player
     const safePosition = findSafePlayerPosition(this.map);
@@ -911,10 +900,6 @@ class GameScene extends Phaser.Scene {
       this.enemies,
       this.currentLevel - 1
     );
-
-    // Reset player health and give bonus
-    // this.playerHealth = Math.min(100, this.playerHealth + 20); // Heal player by 20, up to max 100
-    // this.updatePlayerHealthBar();
   }
 
   setupCollisions(): void {
@@ -947,31 +932,6 @@ class GameScene extends Phaser.Scene {
       undefined,
       this
     );
-
-    // Create player attack area (invisible)
-    // this.playerAttackArea = this.add.rectangle(
-    //   0,
-    //   0,
-    //   tileSize * 1.25,
-    //   tileSize * 1.25,
-    //   0xff0000,
-    //   0
-    // );
-    // this.physics.add.existing(this.playerAttackArea, false);
-    // if (this.playerAttackArea.body) {
-    //   (
-    //     this.playerAttackArea.body as Phaser.Physics.Arcade.Body
-    //   ).setAllowGravity(false);
-    // }
-
-    // Add overlap between attack area and enemies
-    // this.physics.add.overlap(
-    //   this.playerAttackArea,
-    //   this.enemies,
-    //   this.handleAttackHit,
-    //   undefined,
-    //   this
-    // );
 
     // Set camera to follow player
     const worldWidth = mapWidth * tileSize;
@@ -1063,341 +1023,41 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // Handle player movement
-  // updatePlayerMovement() {
-  //   // Reset player velocity
-  //   this.player.setVelocity(0);
+  handleEnemySpecialAttackHit(attack: any, enemyObj: any) {
+    if (enemyObj instanceof Enemy) {
+      // Only damage if projectile is active
+      const enemy = enemyObj;
 
-  //   // Handle player movement
-  //   const speed = 160;
-  //   let moving = false;
+      // Apply damage to enemy
+      enemy.takeDamage(this.player.getSpecialAttackDamage(), this.player);
 
-  //   if (this.cursors.left.isDown) {
-  //     this.player.setVelocityX(-speed);
-  //     this.player.anims.play("walk_left", true);
-  //     moving = true;
-  //     this.playerFacing = "left";
-  //   } else if (this.cursors.right.isDown) {
-  //     this.player.setVelocityX(speed);
-  //     this.player.anims.play("walk_right", true);
-  //     moving = true;
-  //     this.playerFacing = "right";
-  //   }
+      // Start disappearing animation
+      this.hitTarget(attack);
+    }
+  }
 
-  //   if (this.cursors.up.isDown) {
-  //     this.player.setVelocityY(-speed);
-  //     if (!moving) {
-  //       this.player.anims.play("walk_up", true);
-  //     }
-  //     moving = true;
-  //     this.playerFacing = "up";
-  //   } else if (this.cursors.down.isDown) {
-  //     this.player.setVelocityY(speed);
-  //     if (!moving) {
-  //       this.player.anims.play("walk_down", true);
-  //     }
-  //     moving = true;
-  //     this.playerFacing = "down";
-  //   }
-
-  //   // If not moving, play idle animation based on facing direction
-  //   if (!moving) {
-  //     this.player.anims.play(`idle_${this.playerFacing}`, true);
-  //   }
-
-  //   // Prevent player from going outside the map
-  //   if (this.player.x < tileSize / 2) {
-  //     this.player.x = tileSize / 2;
-  //   } else if (this.player.x > mapWidth * tileSize - tileSize / 2) {
-  //     this.player.x = mapWidth * tileSize - tileSize / 2;
-  //   }
-  //   if (this.player.y < tileSize / 2) {
-  //     this.player.y = tileSize / 2;
-  //   } else if (this.player.y > mapHeight * tileSize - tileSize / 2) {
-  //     this.player.y = mapHeight * tileSize - tileSize / 2;
-  //   }
-
-  //   // Update attack area position based on player position and facing direction
-  //   this.updateAttackAreaPosition(this.playerFacing);
-  // }
-
-  // Fire a projectile in the direction the player is facing
-  // fireProjectile() {
-  //   // Visual feedback for attack
-  //   this.cameras.main.shake(100, 0.005);
-
-  //   // Create a new projectile in the facing direction
-  //   const offsetDistance = 20; // Distance from player center to spawn projectile
-  //   let projectileX = this.player.x;
-  //   let projectileY = this.player.y;
-
-  //   // Adjust spawn position based on facing direction
-  //   switch (this.playerFacing) {
-  //     case "left":
-  //       projectileX -= offsetDistance;
-  //       break;
-  //     case "right":
-  //       projectileX += offsetDistance;
-  //       break;
-  //     case "up":
-  //       projectileY -= offsetDistance;
-  //       break;
-  //     case "down":
-  //       projectileY += offsetDistance;
-  //       break;
-  //   }
-
-  //   // Create and add the projectile to the group
-  //   const projectile = new Projectile(
-  //     this,
-  //     projectileX,
-  //     projectileY,
-  //     this.playerFacing
-  //   );
-  //   this.projectiles.add(projectile);
-  // }
-
-  // Perform the second attack (melee slash in front of player)
-  // performAttack2() {
-  //   // Calculate the position where the attack would appear
-  //   let attackX = this.player.x;
-  //   let attackY = this.player.y;
-  //   let angle = 0;
-
-  //   // Position the attack 100 units in front of the player
-  //   switch (this.playerFacing) {
-  //     case "left":
-  //       attackX -= 100;
-  //       angle = 180;
-  //       break;
-  //     case "right":
-  //       attackX += 100;
-  //       angle = 0;
-  //       break;
-  //     case "up":
-  //       attackY -= 100;
-  //       angle = 270;
-  //       break;
-  //     case "down":
-  //       attackY += 100;
-  //       angle = 90;
-  //       break;
-  //   }
-
-  //   // Create a temporary physics body to check for wall collisions
-  //   const tempBody = this.physics.add.sprite(
-  //     attackX,
-  //     attackY,
-  //     "player_attack_2"
-  //   );
-  //   tempBody.setVisible(false);
-  //   tempBody.setSize(32, 32);
-
-  //   // Check if the attack would hit a wall
-  //   let willHitWall = false;
-  //   let destructibleWall: any = null;
-
-  //   this.physics.world.collide(tempBody, this.walls, (_tempBody, wallObj) => {
-  //     willHitWall = true;
-
-  //     // Try to access the wall object safely
-  //     try {
-  //       if ((wallObj as any).isDestructible) {
-  //         destructibleWall = wallObj;
-  //       }
-  //     } catch (e) {
-  //       // Ignore errors if properties don't exist
-  //     }
-  //   });
-
-  //   // Destroy the temporary body
-  //   tempBody.destroy();
-
-  //   // If the attack would hit a wall but it's destructible, allow the attack
-  //   if (willHitWall && !destructibleWall) {
-  //     // Visual feedback that attack can't be performed
-  //     this.player.setTint(0xaaaaaa);
-  //     this.time.delayedCall(100, () => {
-  //       this.player.clearTint();
-  //     });
-  //     return;
-  //   }
-
-  //   // Create the attack animation sprite
-  //   const attackAnim = this.add.sprite(attackX, attackY, "player_attack_2");
-  //   attackAnim.setDepth(15);
-  //   attackAnim.setAngle(angle);
-  //   attackAnim.anims.play("attack2");
-
-  //   // Create a physics body for the attack to detect collisions
-  //   const attackArea = this.physics.add.sprite(
-  //     attackX,
-  //     attackY,
-  //     "player_attack_2"
-  //   );
-  //   attackArea.setVisible(false); // Hide the actual physics sprite
-  //   attackArea.setSize(24, 24); // Set hitbox to 16x16
-  //   attackArea.setOffset(4, 4); // Center the hitbox (assuming 32x32 sprite)
-
-  //   // If we found a destructible wall, destroy it
-  //   if (destructibleWall) {
-  //     // Create a destruction effect at the wall's position
-  //     const deathAnim = this.add.sprite(
-  //       destructibleWall.x,
-  //       destructibleWall.y,
-  //       "brick_explotion"
-  //     );
-  //     deathAnim.setDepth(3);
-  //     this.time.delayedCall(200, () => {
-  //       deathAnim.play("brick_explotion").once("animationcomplete", () => {
-  //         deathAnim.destroy();
-  //       });
-  //     });
-
-  //     // Add a floor tile where the wall was
-  //     const floorTileTypes = Object.values(TILES.FLOOR);
-  //     const tileIndex =
-  //       floorTileTypes[Math.floor(Math.random() * floorTileTypes.length)];
-  //     const floorTile = this.add.sprite(
-  //       destructibleWall.x,
-  //       destructibleWall.y,
-  //       "dungeon_floor",
-  //       tileIndex as number
-  //     );
-  //     floorTile.setScale(2);
-  //     floorTile.setDepth(0); // Below walls and player
-  //     this.floorLayer.add(floorTile);
-
-  //     // Remove the wall after a short delay
-  //     const wallToDestroy = destructibleWall;
-  //     this.time.delayedCall(200, () => {
-  //       if (wallToDestroy && typeof wallToDestroy.destroy === "function") {
-  //         wallToDestroy.destroy();
-  //       }
-  //     });
-  //   }
-
-  //   // Check for enemies in range and damage them
-  //   this.physics.add.overlap(
-  //     attackArea,
-  //     this.enemies,
-  //     (_attackObj, enemyObj) => {
-  //       const enemy = enemyObj as Enemy;
-
-  //       // Apply damage to enemy
-  //       const damage = 30;
-  //       enemy.takeDamage(damage, this.player);
-  //     }
-  //   );
-
-  //   // Clean up the attack area after animation completes
-  //   attackAnim.once("animationcomplete", () => {
-  //     attackAnim.destroy();
-  //     attackArea.destroy();
-  //   });
-  // }
-
-  // Activate the shield
-  // activateShield() {
-  //   // Set shield as active
-  //   this.shieldActive = true;
-
-  //   // Create shield sprite around player
-  //   this.shieldSprite = this.add.sprite(
-  //     this.player.x,
-  //     this.player.y,
-  //     "player_shield"
-  //   );
-  //   this.shieldSprite.setDepth(12); // Above player but below UI
-  //   this.shieldSprite.setScale(1.5);
-
-  //   // Play start animation
-  //   this.shieldSprite.anims.play("shield_start");
-
-  //   // When start animation completes, switch to idle
-  //   this.shieldSprite.once("animationcomplete", () => {
-  //     this.shieldSprite.anims.play("shield_idle");
-
-  //     // Set a timer to end the shield after 2 seconds
-  //     this.time.delayedCall(2000, () => {
-  //       // Play end animation
-  //       this.shieldSprite.anims.play("shield_end");
-
-  //       // When end animation completes, destroy the shield
-  //       this.shieldSprite.once("animationcomplete", () => {
-  //         this.shieldSprite.destroy();
-  //         this.shieldActive = false;
-
-  //         // Set cooldown for 2 more seconds after shield ends
-  //         this.attackCooldown = true;
-  //         this.time.delayedCall(2000, () => {
-  //           this.attackCooldown = false;
-  //         });
-  //       });
-  //     });
-  //   });
-  // }
-
-  // // Update the shield position to follow the player
-  // updateShieldPosition() {
-  //   if (this.shieldActive && this.shieldSprite) {
-  //     this.shieldSprite.x = this.player.x;
-  //     this.shieldSprite.y = this.player.y;
-  //   }
-  // }
-
-  // Position the attack area based on player facing direction
-  // updateAttackAreaPosition(facing: string) {
-  //   if (!this.playerAttackArea || !this.player) return;
-
-  //   const offset = tileSize * 0.75;
-
-  //   switch (facing) {
-  //     case "left":
-  //       this.playerAttackArea.setPosition(
-  //         this.player.x - offset,
-  //         this.player.y
-  //       );
-  //       break;
-  //     case "right":
-  //       this.playerAttackArea.setPosition(
-  //         this.player.x + offset,
-  //         this.player.y
-  //       );
-  //       break;
-  //     case "up":
-  //       this.playerAttackArea.setPosition(
-  //         this.player.x,
-  //         this.player.y - offset
-  //       );
-  //       break;
-  //     case "down":
-  //       this.playerAttackArea.setPosition(
-  //         this.player.x,
-  //         this.player.y + offset
-  //       );
-  //       break;
-  //   }
-  // }
-
-  // Handle attack hit on enemy
-  // handleAttackHit(_: any, object2: any) {
-  //   if (!this.player.getBasicAttackCooldown()) return;
-
-  //   // Cast to Enemy type - make sure we're getting the actual game object
-  //   let enemyObj: any = object2;
-  //   if (object2 instanceof Phaser.Physics.Arcade.Body) {
-  //     enemyObj = object2.gameObject;
-  //   }
-
-  //   const enemy = enemyObj as Enemy;
-
-  //   // Apply damage to enemy
-  //   if (!enemy) return;
-
-  //   // Apply damage and check if it was actually taken (not in cooldown)
-  //   enemy.takeDamage(20, this.player); // Reduced damage from 25 to 20
-  // }
+  hitTarget(attack: Attack, animation?: string) {
+    if (attack.active && !attack.isDisappearing) {
+      attack.isDisappearing = true;
+      attack.setVelocity(0, 0);
+      if (animation) {
+        attack.anims.play(animation, true).once("animationcomplete", () => {
+          attack.active = false;
+          attack.destroy();
+        });
+      } else {
+        if (attack.anims.currentAnim && attack.anims.isPlaying) {
+          attack.once("animationcomplete", () => {
+            attack.active = false;
+            attack.destroy();
+          });
+        } else {
+          attack.active = false;
+          attack.destroy();
+        }
+      }
+    }
+  }
 
   handleSpecialAttackHit(_: any, wallObj: any) {
     let destructibleWall: any = null;
@@ -1496,22 +1156,24 @@ class GameScene extends Phaser.Scene {
     }
 
     // Handle the projectile hit
-    (projectile as Projectile).hitTarget();
+    this.hitTarget(projectile, "projectile_disappear");
   }
 
   // Handle projectile hitting an enemy
   handleProjectileEnemyCollision(projectile: any, enemyObj: any) {
-    const proj = projectile as Projectile;
-
     // Only damage if projectile is active
-    if (proj.active) {
-      const enemy = enemyObj as Enemy;
+    if (
+      projectile.active &&
+      enemyObj instanceof Enemy &&
+      projectile instanceof Projectile
+    ) {
+      const enemy = enemyObj;
 
       // Apply damage to enemy
-      enemy.takeDamage(20, this.player);
+      enemy.takeDamage(this.player.getBasicAttackDamage(), this.player);
 
       // Make projectile disappear
-      proj.hitTarget();
+      this.hitTarget(projectile, "projectile_disappear");
     }
   }
 
@@ -1591,7 +1253,6 @@ class GameScene extends Phaser.Scene {
     // Add click handler to restart the game
     restartButton.on("pointerdown", () => {
       this.scene.restart();
-      // this.playerHealth = 100;
     });
   }
 }

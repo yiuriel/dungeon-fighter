@@ -17,6 +17,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   facing: "up" | "down" | "left" | "right" = "down";
   healthBar: HealthBar | null = null;
   health = 100;
+  basicAttackDamage = 20;
+  specialAttackDamage = 40;
 
   constructor(
     scene: Phaser.Scene,
@@ -289,19 +291,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     attackArea.setOffset(4, 4); // Center the hitbox (assuming 32x32 sprite)
     this.scene.events.emit("special_attack_fired", attackArea);
 
-    // Check for enemies in range and damage them
-    // this.scene.physics.add.overlap(
-    //   attackArea,
-    //   this.scene.enemies,
-    //   (_attackObj, enemyObj) => {
-    //     const enemy = enemyObj as Enemy;
-
-    //     // Apply damage to enemy
-    //     const damage = 30;
-    //     enemy.takeDamage(damage, this);
-    //   }
-    // );
-
     // // Clean up the attack area after animation completes
     attackAnim.once("animationcomplete", () => {
       attackAnim.destroy();
@@ -415,5 +404,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
   getDamageCooldown() {
     return this.damageCooldown;
+  }
+  getBasicAttackDamage() {
+    return this.basicAttackDamage;
+  }
+  getSpecialAttackDamage() {
+    return this.specialAttackDamage;
   }
 }

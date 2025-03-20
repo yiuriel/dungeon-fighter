@@ -302,8 +302,7 @@ export function renderMap(
   scene: Phaser.Scene,
   map: number[][],
   floorLayer: Phaser.GameObjects.Group,
-  walls: Phaser.Physics.Arcade.StaticGroup,
-  decorations: Phaser.GameObjects.Group
+  walls: Phaser.Physics.Arcade.StaticGroup
 ) {
   // Fill the entire map with black background first
   for (let y = 0; y < mapHeight; y++) {
