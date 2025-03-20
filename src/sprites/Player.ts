@@ -1,4 +1,5 @@
-import { mapHeight, mapWidth, TILES, tileSize } from "../map/mapGenerator";
+import { mapHeight, mapWidth, tileSize } from "../map/mapGenerator";
+import { HealthBar } from "./Player/HealthBar";
 import { Projectile } from "./Projectile";
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
@@ -9,9 +10,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private specialAttackCooldown = 0;
   private shieldKey!: Phaser.Input.Keyboard.Key;
   private shieldCooldown = 0;
+  private shieldActive = false;
+  private shieldSprite: Phaser.GameObjects.Sprite | null = null;
+  private damageCooldown = false;
   playerAttackArea!: Phaser.GameObjects.Rectangle;
   facing: "up" | "down" | "left" | "right" = "down";
-  projectiles!: Phaser.Physics.Arcade.Group;
+  healthBar: HealthBar | null = null;
+  health = 100;
 
   constructor(
     scene: Phaser.Scene,
@@ -21,6 +26,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     frame?: number
   ) {
     super(scene, x, y, texture, frame);
+
+    this.healthBar = new HealthBar(scene);
+    this.healthBar.updatePlayerHealthBar(this.health);
 
     this.scene = scene;
 
@@ -79,6 +87,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   update(time: number) {
     this.updatePlayerMovement(time);
+    this.updateShieldPosition();
   }
 
   updatePlayerMovement(time: number) {
@@ -139,7 +148,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     if (this.basicAttackKey.isDown && time > this.basicAttackCooldown) {
       // Fire a projectile
-      this.fireProjectile();
+      this.doBasicAttack();
 
       // Set cooldown
       this.basicAttackCooldown = time + 500; // 500ms cooldown
@@ -148,6 +157,35 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.scene.time.delayedCall(500, () => {
         this.basicAttackCooldown = 0;
       });
+    }
+
+    if (
+      this.specialAttackKey.isDown &&
+      !this.specialAttackCooldown &&
+      time > this.specialAttackCooldown
+    ) {
+      // Perform attack 2
+      this.doSpecialAttack();
+
+      // Set cooldown
+      this.specialAttackCooldown = time + 800; // 800ms cooldown
+
+      // Release cooldown after 500ms
+      this.scene.time.delayedCall(500, () => {
+        this.specialAttackCooldown = 0;
+      });
+    }
+
+    if (
+      this.shieldKey.isDown &&
+      !this.shieldActive &&
+      time > this.shieldCooldown
+    ) {
+      // Activate shield
+      this.activateShield();
+
+      // Set cooldown (managed in activateShield function)
+      this.shieldCooldown = time + 4000; // 4 second total cooldown (2s active + 2s recovery)
     }
   }
 
@@ -172,7 +210,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  fireProjectile() {
+  doBasicAttack() {
     // Visual feedback for attack
     this.scene.cameras.main.shake(100, 0.005);
 
@@ -198,16 +236,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     // Create and add the projectile to the group
-    const projectile = new Projectile(
-      this.scene,
-      projectileX,
-      projectileY,
-      this.facing
+    this.scene.events.emit(
+      "basic_attack_fired",
+      new Projectile(this.scene, projectileX, projectileY, this.facing)
     );
-    this.projectiles.add(projectile);
   }
 
-  performAttack2() {
+  doSpecialAttack() {
     // Calculate the position where the attack would appear
     let attackX = this.x;
     let attackY = this.y;
@@ -233,45 +268,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         break;
     }
 
-    // Create a temporary physics body to check for wall collisions
-    const tempBody = this.scene.physics.add.sprite(
-      attackX,
-      attackY,
-      "player_attack_2"
-    );
-    tempBody.setVisible(false);
-    tempBody.setSize(32, 32);
-
-    // Check if the attack would hit a wall
-    let willHitWall = false;
-    let destructibleWall: any = null;
-
-    // this.scene.physics.world.collide(tempBody, this.walls, (_tempBody, wallObj) => {
-    //   willHitWall = true;
-
-    //   // Try to access the wall object safely
-    //   try {
-    //     if ((wallObj as any).isDestructible) {
-    //       destructibleWall = wallObj;
-    //     }
-    //   } catch (e) {
-    //     // Ignore errors if properties don't exist
-    //   }
-    // });
-
-    // Destroy the temporary body
-    tempBody.destroy();
-
-    // If the attack would hit a wall but it's destructible, allow the attack
-    if (willHitWall && !destructibleWall) {
-      // Visual feedback that attack can't be performed
-      this.setTint(0xaaaaaa);
-      this.scene.time.delayedCall(100, () => {
-        this.clearTint();
-      });
-      return;
-    }
-
     // Create the attack animation sprite
     const attackAnim = this.scene.add.sprite(
       attackX,
@@ -291,44 +287,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     attackArea.setVisible(false); // Hide the actual physics sprite
     attackArea.setSize(24, 24); // Set hitbox to 16x16
     attackArea.setOffset(4, 4); // Center the hitbox (assuming 32x32 sprite)
-
-    // If we found a destructible wall, destroy it
-    if (destructibleWall) {
-      // Create a destruction effect at the wall's position
-      const deathAnim = this.scene.add.sprite(
-        destructibleWall.x,
-        destructibleWall.y,
-        "brick_explotion"
-      );
-      deathAnim.setDepth(3);
-      this.scene.time.delayedCall(200, () => {
-        deathAnim.play("brick_explotion").once("animationcomplete", () => {
-          deathAnim.destroy();
-        });
-      });
-
-      // Add a floor tile where the wall was
-      // const floorTileTypes = Object.values(TILES.FLOOR);
-      // const tileIndex =
-      //   floorTileTypes[Math.floor(Math.random() * floorTileTypes.length)];
-      // const floorTile = this.scene.add.sprite(
-      //   destructibleWall.x,
-      //   destructibleWall.y,
-      //   "dungeon_floor",
-      //   tileIndex as number
-      // );
-      // floorTile.setScale(2);
-      // floorTile.setDepth(0); // Below walls and player
-      // this.scene.floorLayer.add(floorTile);
-
-      // Remove the wall after a short delay
-      const wallToDestroy = destructibleWall;
-      this.scene.time.delayedCall(200, () => {
-        if (wallToDestroy && typeof wallToDestroy.destroy === "function") {
-          wallToDestroy.destroy();
-        }
-      });
-    }
+    this.scene.events.emit("special_attack_fired", attackArea);
 
     // Check for enemies in range and damage them
     // this.scene.physics.add.overlap(
@@ -344,9 +303,117 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // );
 
     // // Clean up the attack area after animation completes
-    // attackAnim.once("animationcomplete", () => {
-    //   attackAnim.destroy();
-    //   attackArea.destroy();
-    // });
+    attackAnim.once("animationcomplete", () => {
+      attackAnim.destroy();
+      attackArea.destroy();
+    });
+  }
+
+  activateShield() {
+    // Set shield as active
+    this.shieldActive = true;
+
+    // Create shield sprite around player
+    this.shieldSprite = this.scene.add.sprite(this.x, this.y, "player_shield");
+    this.shieldSprite.setDepth(12); // Above player but below UI
+    this.shieldSprite.setScale(1.5);
+
+    // Play start animation
+    this.shieldSprite?.anims.play("shield_start");
+
+    // When start animation completes, switch to idle
+    this.shieldSprite?.once("animationcomplete", () => {
+      this.shieldSprite?.anims.play("shield_idle");
+
+      // Set a timer to end the shield after 2 seconds
+      this.scene.time.delayedCall(2000, () => {
+        // Play end animation
+        this.shieldSprite?.anims.play("shield_end");
+
+        // When end animation completes, destroy the shield
+        this.shieldSprite?.once("animationcomplete", () => {
+          this.shieldSprite?.destroy();
+          this.shieldActive = false;
+
+          // Set cooldown for 2 more seconds after shield ends
+          this.shieldCooldown = 2000;
+          this.scene.time.delayedCall(2000, () => {
+            this.shieldCooldown = 0;
+          });
+        });
+      });
+    });
+  }
+
+  // Update the shield position to follow the player
+  updateShieldPosition() {
+    if (this.shieldActive && this.shieldSprite) {
+      this.shieldSprite.x = this.x;
+      this.shieldSprite.y = this.y;
+    }
+  }
+
+  tintShield() {
+    if (this.shieldSprite) {
+      this.shieldSprite.setTint(0x00ffff);
+      this.scene.time.delayedCall(100, () => {
+        if (this.shieldSprite) this.shieldSprite.clearTint();
+      });
+    }
+  }
+
+  playerTakeDamage(damage: number) {
+    if (this.damageCooldown) return;
+
+    this.damageCooldown = true;
+
+    if (!this.healthBar) return;
+
+    this.health -= damage;
+    this.health = Math.max(0, this.health);
+
+    // Update health bar
+    this.healthBar.updatePlayerHealthBar(this.health);
+
+    // Visual feedback
+    this.scene?.cameras?.main?.shake(150, 0.05);
+
+    // Check for game over
+    if (this.health <= 0) {
+      this.scene?.events?.emit("game_over");
+    }
+
+    this.scene.time.delayedCall(1000, () => {
+      this.damageCooldown = false;
+    });
+  }
+
+  // Getters
+  getBasicAttackCooldown() {
+    return this.basicAttackCooldown;
+  }
+  getSpecialAttackKey() {
+    return this.specialAttackKey;
+  }
+  getSpecialAttackCooldown() {
+    return this.specialAttackCooldown;
+  }
+  getShieldKey() {
+    return this.shieldKey;
+  }
+  getShieldCooldown() {
+    return this.shieldCooldown;
+  }
+  getShieldActive() {
+    return this.shieldActive;
+  }
+  getShieldSprite() {
+    return this.shieldSprite;
+  }
+  getPlayerAttackArea() {
+    return this.playerAttackArea;
+  }
+  getDamageCooldown() {
+    return this.damageCooldown;
   }
 }
