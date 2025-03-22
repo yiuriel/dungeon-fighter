@@ -8,7 +8,7 @@ import {
   tileSize,
   TILES,
 } from "./map/mapGenerator";
-import { Enemy } from "./sprites/Enemy";
+import { Enemy } from "./sprites/Enemies/Enemy";
 import { Projectile } from "./sprites/Projectile";
 import "./style.css";
 import { findSafePlayerPosition } from "./map/findSafePlayerPosition";
@@ -68,20 +68,16 @@ class GameScene extends Phaser.Scene {
     });
 
     // Load enemy crab sprite sheet
-    this.load.spritesheet("enemy_crab", "assets/characters/enemy_crab.png", {
+    this.load.spritesheet("crab", "assets/characters/crab.png", {
       frameWidth: 48,
       frameHeight: 32,
     });
 
     // Load enemy octopus sprite sheet
-    this.load.spritesheet(
-      "enemy_octopus",
-      "assets/characters/enemy_octopus.png",
-      {
-        frameWidth: 32,
-        frameHeight: 24,
-      }
-    );
+    this.load.spritesheet("octopus", "assets/characters/octopus.png", {
+      frameWidth: 32,
+      frameHeight: 24,
+    });
 
     // Load attack projectile sprite sheet
     this.load.spritesheet(
@@ -227,108 +223,6 @@ class GameScene extends Phaser.Scene {
         end: 15,
       }),
       frameRate: 10,
-      repeat: -1,
-    });
-
-    // Create animations for the crab enemy
-    this.anims.create({
-      key: "crab_idle",
-      frames: this.anims.generateFrameNumbers("enemy_crab", {
-        start: 0,
-        end: 0,
-      }),
-      frameRate: 10,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "crab_down",
-      frames: this.anims.generateFrameNumbers("enemy_crab", {
-        start: 0,
-        end: 2,
-      }),
-      frameRate: 8,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "crab_left",
-      frames: this.anims.generateFrameNumbers("enemy_crab", {
-        start: 3,
-        end: 5,
-      }),
-      frameRate: 8,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "crab_right",
-      frames: this.anims.generateFrameNumbers("enemy_crab", {
-        start: 6,
-        end: 8,
-      }),
-      frameRate: 8,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "crab_up",
-      frames: this.anims.generateFrameNumbers("enemy_crab", {
-        start: 9,
-        end: 11,
-      }),
-      frameRate: 8,
-      repeat: -1,
-    });
-
-    // Create animations for the octopus enemy
-    this.anims.create({
-      key: "octopus_idle",
-      frames: this.anims.generateFrameNumbers("enemy_octopus", {
-        start: 0,
-        end: 0,
-      }),
-      frameRate: 10,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "octopus_down",
-      frames: this.anims.generateFrameNumbers("enemy_octopus", {
-        start: 0,
-        end: 2,
-      }),
-      frameRate: 8,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "octopus_left",
-      frames: this.anims.generateFrameNumbers("enemy_octopus", {
-        start: 3,
-        end: 5,
-      }),
-      frameRate: 8,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "octopus_right",
-      frames: this.anims.generateFrameNumbers("enemy_octopus", {
-        start: 6,
-        end: 8,
-      }),
-      frameRate: 8,
-      repeat: -1,
-    });
-
-    this.anims.create({
-      key: "octopus_up",
-      frames: this.anims.generateFrameNumbers("enemy_octopus", {
-        start: 9,
-        end: 11,
-      }),
-      frameRate: 8,
       repeat: -1,
     });
 
@@ -800,13 +694,11 @@ class GameScene extends Phaser.Scene {
 
       // Check if projectile is past a certain frame, if so, don't damage
       const animation = attack.anims.currentAnim;
-      console.log(attack.active, animation);
       if (
         animation &&
         attack.anims.currentFrame &&
         attack.anims.currentFrame?.index >= animation.frames.length / 2
       ) {
-        console.log("Don't damage if past last frame");
         return; // Don't damage if past last frame
       }
 

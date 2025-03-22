@@ -8,7 +8,7 @@ import {
   tileSize,
   TILES,
 } from "../map/mapGenerator";
-import { Enemy } from "../sprites/Enemy";
+import { Enemy } from "../sprites/Enemies/Enemy";
 import { Projectile } from "../sprites/Projectile";
 import { findSafePlayerPosition } from "../map/findSafePlayerPosition";
 import { NewLevelSign } from "../helpers/new.level.sign";

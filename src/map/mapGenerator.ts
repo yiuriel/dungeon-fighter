@@ -1,4 +1,4 @@
-import { createEnemy } from "../sprites/Enemy";
+import { createEnemy } from "../sprites/Enemies/EnemyCreator";
 // Map generation constants and variables
 export const tileSize = 32; // Display size of tiles
 export let mapWidth = 40;

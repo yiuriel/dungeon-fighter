@@ -20,6 +20,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     frame?: number
   ) {
     super(scene, x, y, texture, frame);
+    this.createAnimations();
     this.scene = scene;
 
     // Set default values
@@ -48,6 +49,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   // Abstract methods to be implemented by subclasses
   protected abstract getEnemyType(): string;
   protected abstract getAnimationPrefix(): string;
+  protected abstract createAnimations(): void;
 
   // Methods for enemy characteristics that can be overridden by subclasses
   protected getMaxHealth(): number {
@@ -68,30 +70,30 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   updateHealthBar() {
     this.healthBar.clear();
-    
+
     const barWidth = 30;
     const barHeight = 6;
     const borderRadius = 3;
     const padding = 1;
-    
+
     // Position above the enemy
     const x = this.x - barWidth / 2;
     const y = this.y - this.height / 2 - 10;
-    
+
     // Background (dark with transparency)
     this.healthBar.fillStyle(0x333333, 0.7);
     this.healthBar.fillRoundedRect(x, y, barWidth, barHeight, borderRadius);
-    
+
     // Border
     this.healthBar.lineStyle(1, 0xffffff, 0.5);
     this.healthBar.strokeRoundedRect(x, y, barWidth, barHeight, borderRadius);
-    
+
     // Health fill
     if (this.health > 0) {
       // Calculate health percentage
       const healthPercent = this.health / this.maxHealth;
       const healthWidth = Math.max(0, healthPercent * (barWidth - padding * 2));
-      
+
       // Choose color based on health percentage
       let fillColor;
       if (healthPercent > 0.6) {
@@ -101,25 +103,25 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
       } else {
         fillColor = 0xff4444; // Red for low health
       }
-      
+
       // Draw the health bar with rounded corners
       this.healthBar.fillStyle(fillColor, 1);
-      
+
       // Only use rounded corners if there's enough health to show them
       if (healthWidth > borderRadius * 2) {
         this.healthBar.fillRoundedRect(
-          x + padding, 
-          y + padding, 
-          healthWidth, 
-          barHeight - padding * 2, 
+          x + padding,
+          y + padding,
+          healthWidth,
+          barHeight - padding * 2,
           borderRadius - 1
         );
       } else {
         // For very low health, just draw a rectangle to avoid visual glitches
         this.healthBar.fillRect(
-          x + padding, 
-          y + padding, 
-          healthWidth, 
+          x + padding,
+          y + padding,
+          healthWidth,
           barHeight - padding * 2
         );
       }
@@ -437,83 +439,5 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.anims.play(`${this.getAnimationPrefix()}_up`, true);
       }
     }
-  }
-}
-
-// Crab enemy implementation
-export class EnemyCrab extends Enemy {
-  constructor(scene: Phaser.Scene, x: number, y: number, frame?: number) {
-    super(scene, x, y, "enemy_crab", frame);
-  }
-
-  protected getEnemyType(): string {
-    return "crab";
-  }
-
-  protected getAnimationPrefix(): string {
-    return "crab";
-  }
-
-  // Override base characteristics for crab
-  protected getMaxHealth(): number {
-    return 120; // Crabs have more health
-  }
-
-  protected getDamageCooldownDuration(): number {
-    return 1200; // Longer cooldown between attacks
-  }
-
-  protected getMoveSpeed(): number {
-    return 45; // Slower movement
-  }
-
-  protected getAttackDamage(): number {
-    return 15; // Higher damage
-  }
-}
-
-// Octopus enemy implementation
-export class EnemyOctopus extends Enemy {
-  constructor(scene: Phaser.Scene, x: number, y: number, frame?: number) {
-    super(scene, x, y, "enemy_octopus", frame);
-  }
-
-  protected getEnemyType(): string {
-    return "octopus";
-  }
-
-  protected getAnimationPrefix(): string {
-    return "octopus";
-  }
-
-  // Override base characteristics for octopus
-  protected getMaxHealth(): number {
-    return 80; // Less health than crab
-  }
-
-  protected getDamageCooldownDuration(): number {
-    return 800; // Faster attack rate
-  }
-
-  protected getMoveSpeed(): number {
-    return 60; // Faster movement
-  }
-
-  protected getAttackDamage(): number {
-    return 8; // Less damage per hit
-  }
-}
-
-// Factory function to create the appropriate enemy type
-export function createEnemy(
-  scene: Phaser.Scene,
-  x: number,
-  y: number,
-  type: string
-): Enemy {
-  if (type === "enemy_octopus") {
-    return new EnemyOctopus(scene, x, y);
-  } else {
-    return new EnemyCrab(scene, x, y);
   }
 }
