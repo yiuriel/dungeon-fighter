@@ -1,6 +1,6 @@
-import { mapHeight, mapWidth, tileSize } from "../map/mapGenerator";
-import { HealthBar } from "./Player/HealthBar";
-import { Projectile } from "./Projectile";
+import { mapHeight, mapWidth, tileSize } from "../../map/mapGenerator";
+import { HealthBar } from "./HealthBar";
+import { Projectile } from "../Projectile";
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;

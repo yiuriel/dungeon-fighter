@@ -14,7 +14,7 @@ import "./style.css";
 import { findSafePlayerPosition } from "./map/findSafePlayerPosition";
 import { NewLevelSign } from "./helpers/new.level.sign";
 import { StartScreen } from "./helpers/start.screen";
-import { Player } from "./sprites/Player";
+import { Player } from "./sprites/Player/Player";
 import { Attack } from "./sprites/Attack/types";
 
 class GameScene extends Phaser.Scene {
