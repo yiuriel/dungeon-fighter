@@ -3,8 +3,15 @@ import { Enemy } from "./Enemy";
 // Crab enemy implementation
 
 export class EnemyCrab extends Enemy {
-  constructor(scene: Phaser.Scene, x: number, y: number, frame?: number) {
-    super(scene, x, y, "enemy_crab", frame);
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    map: number[][],
+    player: Phaser.Physics.Arcade.Sprite,
+    frame?: number
+  ) {
+    super(scene, x, y, "enemy_crab", map, player, frame);
   }
 
   protected getEnemyType(): string {

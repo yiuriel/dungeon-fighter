@@ -453,7 +453,13 @@ class GameScene extends Phaser.Scene {
     this.setupCollisions();
 
     // Spawn enemies
-    this.MapGenerator.spawnEnemies(this, this.map, this.enemies);
+    this.MapGenerator.spawnEnemies(
+      this,
+      this.map,
+      this.enemies,
+      0,
+      this.player
+    );
 
     // Debug: Log map data to console
     console.log("Map generation complete");
@@ -568,7 +574,8 @@ class GameScene extends Phaser.Scene {
       this,
       this.map,
       this.enemies,
-      this.currentLevel - 1 + Math.round(Math.random() * this.currentLevel)
+      this.currentLevel - 1 + Math.round(Math.random() * this.currentLevel),
+      this.player
     );
   }
 

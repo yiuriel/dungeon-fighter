@@ -3,8 +3,15 @@ import { Enemy } from "./Enemy";
 // Octopus enemy implementation
 
 export class EnemyOctopus extends Enemy {
-  constructor(scene: Phaser.Scene, x: number, y: number, frame?: number) {
-    super(scene, x, y, "enemy_octopus", frame);
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    map: number[][],
+    player: Phaser.Physics.Arcade.Sprite,
+    frame?: number
+  ) {
+    super(scene, x, y, "enemy_octopus", map, player, frame);
   }
 
   protected getEnemyType(): string {

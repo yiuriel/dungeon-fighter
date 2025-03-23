@@ -452,7 +452,8 @@ export class MapGenerator {
     scene: Phaser.Scene,
     map: number[][],
     enemies: Phaser.Physics.Arcade.Group,
-    additionalEnemies: number = 0
+    additionalEnemies: number = 0,
+    player: Phaser.Physics.Arcade.Sprite
   ): void {
     // Number of enemies to spawn
     const enemyCount = 1 + additionalEnemies;
@@ -507,7 +508,14 @@ export class MapGenerator {
         const enemyType = Math.random() < 0.5 ? "enemy_crab" : "enemy_octopus";
 
         // Create the appropriate enemy type using the factory function
-        const enemy = createEnemy(scene, pixelX, pixelY, enemyType);
+        const enemy = createEnemy(
+          scene,
+          pixelX,
+          pixelY,
+          enemyType,
+          map,
+          player
+        );
 
         // Add the enemy to the group
         enemies.add(enemy);
@@ -515,6 +523,7 @@ export class MapGenerator {
         // Make sure the enemy is active and visible
         enemy.setActive(true);
         enemy.setVisible(true);
+        enemy.followPlayer(player);
       }
     }
   }

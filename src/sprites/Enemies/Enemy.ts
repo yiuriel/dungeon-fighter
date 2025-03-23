@@ -1,3 +1,5 @@
+import EasyStar from "easystarjs";
+
 // Base Enemy class that implements common functionality
 export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   health: number;
@@ -11,15 +13,30 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   protected targetPosition: { x: number; y: number } | null = null;
   protected pathfindingCooldown: number = 0;
   enemyType: string;
+  protected map: number[][];
+  protected pathfinder: any;
+  protected speed: number = 0;
+  protected player: Phaser.Physics.Arcade.Sprite;
 
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
     texture: string,
+    map: number[][],
+    player: Phaser.Physics.Arcade.Sprite,
     frame?: number
   ) {
     super(scene, x, y, texture, frame);
+
+    this.player = player;
+    this.map = map; // Store the 2D map
+    this.pathfinder = new EasyStar.js();
+    this.pathfinder.setGrid(this.map);
+    this.pathfinder.setAcceptableTiles([0]); // Only floor tiles are walkable
+    // this.pathfinder.enableDiagonals();
+    this.speed = this.getMoveSpeed(); // Pixels per second
+
     this.createAnimations();
     this.scene = scene;
 
@@ -66,6 +83,48 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   protected getAttackDamage(): number {
     return 10; // Default attack damage
+  }
+
+  followPlayer(player: Phaser.Physics.Arcade.Sprite) {
+    const startX = Math.floor(this.x / 32);
+    const startY = Math.floor(this.y / 32);
+    const endX = Math.floor(player.x / 32);
+    const endY = Math.floor(player.y / 32);
+
+    this.pathfinder.findPath(
+      startX,
+      startY,
+      endX,
+      endY,
+      (path: { x: number; y: number }[]) => {
+        if (path && path.length > 1) {
+          this.moveAlongPath(path, player);
+        }
+      }
+    );
+
+    this.pathfinder.calculate();
+  }
+
+  moveAlongPath(
+    path: { x: number; y: number }[],
+    player: Phaser.Physics.Arcade.Sprite
+  ) {
+    if (path.length <= 1) return;
+
+    const nextTile = path[1]; // Get the next tile in the path
+    const nextX = nextTile.x * 32 + 16; // Center of tile
+    const nextY = nextTile.y * 32 + 16;
+
+    this.scene.tweens.add({
+      targets: this,
+      x: nextX,
+      y: nextY,
+      duration: 500, // Adjust speed
+      onComplete: () => {
+        this.followPlayer(player); // Recursively find the next move
+      },
+    });
   }
 
   updateHealthBar() {
@@ -262,7 +321,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
       !this.damageCooldown &&
       time > this.pathfindingCooldown
     ) {
-      this.moveTowardsPlayerSmartly(player, time);
+      // this.moveTowardsPlayerSmartly(player, time);
     }
 
     // Update animation based on velocity if we're moving
