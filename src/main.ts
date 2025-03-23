@@ -360,6 +360,72 @@ class GameScene extends Phaser.Scene {
     );
 
     this.events.on("game_over", this.triggerGameOver.bind(this));
+
+    this.events.on("placeWall", (x: number, y: number, facing: string) => {
+      this.placeWall(x, y, facing);
+    });
+  }
+
+  placeWall(x: number, y: number, facing: string) {
+    // Try to place wall based on map
+    let translatedX = Math.floor(x / tileSize);
+    let translatedY = Math.floor(y / tileSize);
+
+    if (facing === "up") {
+      translatedY -= 1;
+    } else if (facing === "down") {
+      translatedY += 1;
+    } else if (facing === "left") {
+      translatedX -= 1;
+    } else if (facing === "right") {
+      translatedX += 1;
+    }
+
+    if (this.map[translatedY][translatedX] === 0) {
+      this.map[translatedY][translatedX] = 1;
+      const wall = this.walls.create(
+        translatedX * tileSize + tileSize / 2,
+        translatedY * tileSize + tileSize / 2,
+        "dungeon_wall",
+        TILES.WALL.WALL
+      );
+      wall.setScale(2);
+      wall.setDepth(2); // Set walls to be above floor and decorations
+
+      // Mark some walls as destructible based on probability
+      // Don't make edge walls destructible to prevent escaping the map
+      if (
+        translatedX > 1 &&
+        translatedY > 1 &&
+        translatedX < mapWidth - 2 &&
+        translatedY < mapHeight - 2
+      ) {
+        // Use a custom property that's easier to check
+        (wall as any).isDestructible = true;
+
+        // Visual indicator that the wall is destructible (slightly different tint)
+        wall.setTint(0xcccccc);
+      }
+
+      // Update the physics body size to match the scaled sprite
+      if (wall.body) {
+        wall.body.setSize(tileSize, tileSize);
+        wall.body.setOffset(-7, -7);
+      }
+
+      this.player.wallPlaced();
+
+      const floorTile = this.floorLayer.getChildren().find((child) => {
+        const spriteChild = child as Phaser.Physics.Arcade.Sprite;
+        return (
+          Math.round(spriteChild.x) === translatedX * tileSize + tileSize / 2 &&
+          Math.round(spriteChild.y) === translatedY * tileSize + tileSize / 2
+        );
+      });
+      if (floorTile) {
+        floorTile.destroy();
+      }
+    }
   }
 
   // Function to start the game (can be called directly to bypass start screen)
@@ -562,7 +628,7 @@ class GameScene extends Phaser.Scene {
       this,
       this.map,
       this.enemies,
-      this.currentLevel - 1
+      this.currentLevel - 1 + Math.round(Math.random() * this.currentLevel)
     );
   }
 
@@ -736,11 +802,15 @@ class GameScene extends Phaser.Scene {
   handleSpecialAttackHit(_: any, wallObj: any) {
     let destructibleWall: any = null;
 
+    // Check if the wall is active
+    if (!wallObj.active) return;
+
     // Try to access the wall object safely
     try {
       if ((wallObj as any).isDestructible) {
         destructibleWall = wallObj;
       }
+      wallObj.active = false;
     } catch (e) {
       // Ignore errors if properties don't exist
     } finally {
@@ -777,6 +847,7 @@ class GameScene extends Phaser.Scene {
         const wallToDestroy = destructibleWall;
         this.time.delayedCall(200, () => {
           if (wallToDestroy && typeof wallToDestroy.destroy === "function") {
+            this.player.addWallToPlayer();
             wallToDestroy.destroy();
           }
         });
@@ -790,8 +861,11 @@ class GameScene extends Phaser.Scene {
       // Try to access the wall object safely
       const wall = wallObj.gameObject || wallObj;
 
+      if (!wall.active) return;
+
       // Check if the wall is destructible
       if (wall && wall.isDestructible) {
+        wall.active = false;
         // Create a destruction effect at the wall's position
         const scene = projectile.scene;
 
@@ -822,8 +896,13 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(200, () => {
           if (wall && wall.destroy) {
             wall.destroy();
+            this.player.addWallToPlayer();
           }
         });
+
+        this.map[Math.floor(wall.y / tileSize)][
+          Math.floor(wall.x / tileSize)
+        ] = 0;
       }
     } catch (e) {
       // Ignore errors if properties don't exist
@@ -842,8 +921,6 @@ class GameScene extends Phaser.Scene {
       projectile instanceof Projectile
     ) {
       const enemy = enemyObj;
-
-      console.log(projectile.anims.currentAnim);
 
       // Apply damage to enemy
       enemy.takeDamage(this.player.getBasicAttackDamage(), this.player);

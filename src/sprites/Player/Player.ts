@@ -12,6 +12,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private shieldCooldown = 0;
   private shieldActive = false;
   private shieldSprite: Phaser.GameObjects.Sprite | null = null;
+  private wallsKey!: Phaser.Input.Keyboard.Key;
+  private wallsCooldown = 0;
   private damageCooldown = false;
   playerAttackArea!: Phaser.GameObjects.Rectangle;
   facing: "up" | "down" | "left" | "right" = "down";
@@ -24,7 +26,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     basic?: Phaser.GameObjects.Container;
     attack2?: Phaser.GameObjects.Container;
     shield?: Phaser.GameObjects.Container;
+    walls?: Phaser.GameObjects.Container;
   } = {};
+
+  walls: number = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -53,6 +58,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.shieldKey = scene.input.keyboard.addKey(
       Phaser.Input.Keyboard.KeyCodes.X
     ); // X key for shield
+    this.wallsKey = scene.input.keyboard.addKey(
+      Phaser.Input.Keyboard.KeyCodes.V
+    ); // V key for walls
 
     // Add to scene and physics
     scene.add.existing(this);
@@ -92,13 +100,41 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.anims.play("idle_down");
 
+    this.setWallCount();
+
     this.createCooldownIndicators();
+  }
+
+  setWallCount() {
+    const wallsText = this.scene.add.text(
+      this.healthBar!.x + 220,
+      this.healthBar!.y + 16,
+      `Walls: ${this.walls}`,
+      {
+        fontSize: 20,
+        fontFamily: "Arial",
+        color: "#fff",
+        stroke: "#000",
+        strokeThickness: 4,
+      }
+    );
+    this.cooldownIcons.walls?.destroy();
+    this.cooldownIcons.walls = this.scene.add.container(
+      this.healthBar!.x + 10,
+      this.healthBar!.y,
+      [wallsText]
+    );
+
+    this.cooldownIcons.walls.setDepth(201);
+    this.cooldownIcons.walls.setScrollFactor(0);
   }
 
   update(time: number) {
     this.updatePlayerMovement(time);
     this.updateShieldPosition();
     this.updateCooldownIndicators(time);
+
+    this.setWallCount();
   }
 
   updatePlayerMovement(time: number) {
@@ -140,6 +176,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // If not moving, play idle animation based on facing direction
     if (!moving) {
       this.anims.play(`idle_${this.facing}`, true);
+    }
+
+    // Handle walls placement
+    if (this.wallsKey.isDown && time > this.wallsCooldown && this.walls > 0) {
+      this.scene.events.emit("placeWall", this.x, this.y, this.facing);
     }
 
     // Prevent player from going outside the map
@@ -595,6 +636,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     cooldownOverlay.arc(centerX, centerY, radius, startAngle, endAngle, false);
     cooldownOverlay.closePath();
     cooldownOverlay.fillPath();
+  }
+
+  addWallToPlayer() {
+    if (this.walls >= 15) return;
+    this.walls++;
+  }
+
+  wallPlaced() {
+    this.walls--;
   }
 
   // Getters
