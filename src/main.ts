@@ -1,10 +1,8 @@
 import Phaser from "phaser";
 import {
-  generateMap,
+  MapGenerator,
   mapHeight,
   mapWidth,
-  renderMap as renderMapFromGenerator,
-  spawnEnemies as spawnEnemiesFromGenerator,
   tileSize,
   TILES,
 } from "./map/mapGenerator";
@@ -32,6 +30,7 @@ class GameScene extends Phaser.Scene {
   levelSignManager: NewLevelSign | null = null; // Level sign manager
   startScreen: StartScreen | null = null;
   gameStarted = false;
+  MapGenerator: MapGenerator = new MapGenerator();
 
   constructor() {
     super();
@@ -434,10 +433,10 @@ class GameScene extends Phaser.Scene {
     this.gameStarted = true;
 
     // Generate procedural map
-    this.map = generateMap();
+    this.map = this.MapGenerator.generateMap();
 
     // Render the map
-    renderMapFromGenerator(this, this.map, this.floorLayer, this.walls);
+    this.MapGenerator.renderMap(this, this.map, this.floorLayer, this.walls);
 
     // Find a safe position for the player
     const safePosition = findSafePlayerPosition(this.map);
@@ -451,69 +450,10 @@ class GameScene extends Phaser.Scene {
       0 // Use the first frame
     );
 
-    // Add collision between player and walls
-    this.physics.add.collider(this.player, this.walls);
-
-    // Add collision between enemies and walls
-    this.physics.add.collider(this.enemies, this.walls);
-
-    // Add collision between enemies and player
-    this.physics.add.collider(
-      this.player,
-      this.enemies,
-      this.handlePlayerEnemyCollision,
-      undefined,
-      this
-    );
-
-    // Add collision between enemies
-    this.physics.add.collider(this.enemies, this.enemies);
-
-    // Add collision between projectiles and walls
-    this.physics.add.collider(
-      this.basicAttacksGroup,
-      this.walls,
-      this.handleProjectileWallCollision,
-      undefined,
-      this
-    );
-
-    this.physics.add.overlap(
-      this.specialAttacksGroup,
-      this.walls,
-      this.handleSpecialAttackHit,
-      undefined,
-      this
-    );
-
-    // Add collision between projectiles and enemies
-    this.physics.add.overlap(
-      this.basicAttacksGroup,
-      this.enemies,
-      this.handleProjectileEnemyCollision,
-      undefined,
-      this
-    );
-
-    // Add collision between special attacks and enemies
-    this.physics.add.overlap(
-      this.specialAttacksGroup,
-      this.enemies,
-      this.handleEnemySpecialAttackHit,
-      undefined,
-      this
-    );
-
-    // Set camera to follow player
-    // Set the camera bounds to match the actual map size
-    const worldWidth = mapWidth * tileSize;
-    const worldHeight = mapHeight * tileSize;
-    this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
-    this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
-    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+    this.setupCollisions();
 
     // Spawn enemies
-    spawnEnemiesFromGenerator(this, this.map, this.enemies);
+    this.MapGenerator.spawnEnemies(this, this.map, this.enemies);
 
     // Debug: Log map data to console
     console.log("Map generation complete");
@@ -550,7 +490,7 @@ class GameScene extends Phaser.Scene {
     // Update enemies
     const player = this.player;
     this.enemies.getChildren().forEach((enemy: any) => {
-      if (enemy.update) {
+      if (enemy.update && enemy instanceof Enemy) {
         enemy.update(time, player);
       }
     });
@@ -607,14 +547,14 @@ class GameScene extends Phaser.Scene {
     this.basicAttacksGroup.clear(true, true);
 
     // Generate a new map
-    this.map = generateMap();
+    this.map = this.MapGenerator.generateMap();
 
     // Clear and recreate walls
     this.walls.clear(true, true);
     this.floorLayer.clear(true, true);
 
     // Render the new map
-    renderMapFromGenerator(this, this.map, this.floorLayer, this.walls);
+    this.MapGenerator.renderMap(this, this.map, this.floorLayer, this.walls);
 
     // Find a safe position for the player
     const safePosition = findSafePlayerPosition(this.map);
@@ -624,7 +564,7 @@ class GameScene extends Phaser.Scene {
     this.setupCollisions();
 
     // Spawn enemies for the new level
-    spawnEnemiesFromGenerator(
+    this.MapGenerator.spawnEnemies(
       this,
       this.map,
       this.enemies,
@@ -633,6 +573,12 @@ class GameScene extends Phaser.Scene {
   }
 
   setupCollisions(): void {
+    // Add collision between player and walls
+    this.physics.add.collider(this.player, this.walls);
+
+    // Add collision between enemies and walls
+    this.physics.add.collider(this.enemies, this.walls);
+
     // Add collision between enemies and player
     this.physics.add.collider(
       this.player,
@@ -654,6 +600,14 @@ class GameScene extends Phaser.Scene {
       this
     );
 
+    this.physics.add.overlap(
+      this.specialAttacksGroup,
+      this.walls,
+      this.handleSpecialAttackHit,
+      undefined,
+      this
+    );
+
     // Add collision between projectiles and enemies
     this.physics.add.overlap(
       this.basicAttacksGroup,
@@ -663,7 +617,17 @@ class GameScene extends Phaser.Scene {
       this
     );
 
+    // Add collision between special attacks and enemies
+    this.physics.add.overlap(
+      this.specialAttacksGroup,
+      this.enemies,
+      this.handleEnemySpecialAttackHit,
+      undefined,
+      this
+    );
+
     // Set camera to follow player
+    // Set the camera bounds to match the actual map size
     const worldWidth = mapWidth * tileSize;
     const worldHeight = mapHeight * tileSize;
     this.physics.world.setBounds(0, 0, worldWidth, worldHeight);

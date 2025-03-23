@@ -272,7 +272,7 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   // Smart movement that avoids walls
   moveTowardsPlayerSmartly(player: Phaser.Physics.Arcade.Sprite, time: number) {
     // Only recalculate path every 500ms to avoid jittery movement
-    this.pathfindingCooldown = time + 500;
+    this.pathfindingCooldown = time + 1000;
 
     // Get distance to player
     const distToPlayer = Phaser.Math.Distance.Between(
